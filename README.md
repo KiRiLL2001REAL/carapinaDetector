@@ -2,7 +2,7 @@
 A program for HACKATON2022
 ___
 
-Visual Studio 2019.
+Visual Studio 2019 x64 project.
 
 To launch application you should copy some dll files to folder \<ProjectDir\>\x64\Debug|Release.
   
