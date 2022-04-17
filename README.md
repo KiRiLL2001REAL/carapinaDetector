@@ -21,3 +21,5 @@ To launch application you should copy some dll files to folder \<ProjectDir\>\x6
   - \<ProjectDir\>\carapinaDetector\libs\SFML-2.5.1\bin\\<b>sfml-graphics-2.dll</b>
   - \<ProjectDir\>\carapinaDetector\libs\SFML-2.5.1\bin\\<b>sfml-system-2.dll</b>
   - \<ProjectDir\>\carapinaDetector\libs\SFML-2.5.1\bin\\<b>sfml-window-2.dll</b>
+
+Also download this dataset https://drive.google.com/file/d/1wnwdPxhDt2N_sQz9Fy5JRt6RaDUj4lSu/view?usp=sharing
