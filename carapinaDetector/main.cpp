@@ -182,6 +182,7 @@ int main()
 
                 counter++;
             }
+            else text.setString("Finished");
             timer.restart();
         }
 
