@@ -3,6 +3,7 @@
 #include <SFML/Graphics.hpp>
 #include <string>
 #include <vector>
+#include <fstream>
 
 #include "extra.hpp"
 
@@ -33,57 +34,25 @@ void processGrayMat(cv::Mat& mat) {
     convertScaleAbs(gradY, absGradY);
     addWeighted(absGradX, 0.5, absGradY, 0.5, 0, grad);
 
-    // === вычисляем пороговое значение для theshold
-    long long counts[256]; memset(counts, 0, sizeof(long long) * 256);
-    for (auto pointer = grad.datastart; pointer != grad.dataend; pointer++) {
-        counts[*pointer]++;
-    }
-    for (int i = 0; i < 4; i++)
-        counts[i] = 0;
-    long long sum = 0;
-    for (int i = 0; i < 256; i++)
-        sum += counts[i];
+    const int LOW_TRESHOLD = 20;
+    const int HIGH_TRESHOLD = 70;
 
-    long long sumLocal = 0;
-    int minPixel = 256;
-    double koeff = 0.10;
-    while (sumLocal < sum * koeff)
-        sumLocal += counts[--minPixel];
+    Canny(grad, grad, LOW_TRESHOLD, HIGH_TRESHOLD, 3);
 
-    // === используя ранее найденное пороговое значение, преобразуем матрицу
-    threshold(grad, grad, minPixel, 255, THRESH_BINARY);
-
-    // === раздуваем пиксели до диаметра kernelSize
-    int kernelSize = 3;
-    Mat kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
-    dilate(grad, grad, kernel);
-
-    // === пытаемся отфильтровать "шум" раскрытием и закрытием областей
-    morphologyEx(grad, grad, MORPH_OPEN, kernel);
-    morphologyEx(grad, grad, MORPH_CLOSE, kernel);
-
-    // === отсеиваем мелкие контуры
-    vector<vector<cv::Point>> contours;
-    vector<cv::Vec4i> hierarchy;
-    double minSize = 1000;
-    findContours(grad, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_TC89_KCOS);
-    grad = Mat::zeros(grad.size(), CV_8U); // перерисовОчка
-    for (size_t i = 0; i < contours.size(); i++) {
-        if (contourArea(contours[i]) > minSize) {
-            drawContours(grad, contours, (int)i, {255}, 1, cv::LINE_8, hierarchy, 0);
-        }
+    RNG rng(12345);
+    vector<vector<Point>> contours;
+    vector<Vec4i> hierarchy;
+    findContours(grad, contours, hierarchy, RETR_TREE, CHAIN_APPROX_TC89_KCOS);
+    cv::Mat drawing = Mat::zeros(grad.size(), CV_8UC3);
+    for (size_t i = 0; i < contours.size(); i++)
+    {
+        //Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+        Scalar color = Scalar(0, 0, 255);
+        drawContours(drawing, contours, (int)i, color, 1, LINE_8, hierarchy, 0);
+        extra::getOrientation(contours[i], drawing);
     }
 
-    // === пытаемся замкнуть оставшиеся контуры 
-    dilate(grad, grad, kernel);
-    kernelSize = 5;
-    kernel.release();
-    kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
-    morphologyEx(grad, grad, MORPH_CLOSE, kernel);
-
-    // === заливаем пустоты в контурах
-    grad = extra::imfill(grad);
-
+    
 
     gradX.release();
     gradY.release();
@@ -92,7 +61,8 @@ void processGrayMat(cv::Mat& mat) {
     blured.release();
     mat.release();
 
-    mat = grad;
+    grad.release();
+    mat = drawing;
 
     cout << "Processed in " << timer.getElapsedTime().asMilliseconds() << "ms\n";
 }
@@ -110,8 +80,6 @@ int main()
     vector<string> imagePath = {};
 
     extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
-    //for (auto& it : imagePath)
-    //    cout << it << '\n';
 
     if (imagePath.empty()) {
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
@@ -140,7 +108,7 @@ int main()
     processGrayMat(grayMat);
     cv::imwrite(imagePath[0] + ".jpg", grayMat);
 
-    extra::cvtGrayMatToImage(grayMat, image);
+    extra::cvtRGBMatToImage(grayMat, image);
     texture.loadFromImage(image);
     sprite.setTexture(texture);
 
@@ -175,7 +143,7 @@ int main()
                 processGrayMat(grayMat);
                 cv::imwrite(imagePath[counter] + ".jpg", grayMat);
 
-                extra::cvtGrayMatToImage(grayMat, image);
+                extra::cvtRGBMatToImage(grayMat, image);
                 texture.loadFromImage(image);
 
                 text.setString(imagePath[counter]);
