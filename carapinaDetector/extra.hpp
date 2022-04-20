@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <SFML/Graphics.hpp>
 #include <opencv2/opencv.hpp>
+#include <exception>
 
 namespace extra {
 	using namespace std;
@@ -17,6 +18,8 @@ namespace extra {
 	void cvtRGBMatToImage(const cv::Mat& mat, sf::Image& image);
 
 	cv::Mat imfill(const cv::Mat& mat);
+
+	void filterStrong(const cv::Mat& mat, cv::Mat& dst, char orientation);
 }
 
 void extra::loadFilenames(const string& folder, const string& extension, vector<string>& out)
@@ -81,4 +84,41 @@ cv::Mat extra::imfill(const cv::Mat& mat)
 	invFilled.release();
 
 	return out;
+}
+
+void extra::filterStrong(const cv::Mat& mat, cv::Mat& dst, char orientation)
+{
+	using namespace cv;
+
+	if (orientation != 'x' && orientation != 'y')
+		throw std::exception("Unknown orientation");
+
+	Mat _src = mat.clone();
+	if (orientation == 'y')
+		_src = _src.t();
+
+	cv::Mat _dst = Mat::zeros(_src.size(), _src.type());
+
+	for (int i = 0; i < _src.rows; i++) {
+		if (_src.at<uchar>(i, 0) > _src.at<uchar>(i, 1)) {
+			_dst.at<uchar>(i, 0) = _src.at<uchar>(i, 0);
+		}
+		for (int j = 1; j < _src.cols - 1; j++) {
+			if (_src.at<uchar>(i, j) > _src.at<uchar>(i, j + 1) && \
+				_src.at<uchar>(i, j) > _src.at<uchar>(i, j - 1))
+			{
+				_dst.at<uchar>(i, j) = _src.at<uchar>(i, j);
+			}
+		}
+		if (_src.at<uchar>(i, _src.cols - 1) > _src.at<uchar>(i, _src.cols - 2)) {
+			_dst.at<uchar>(i, _src.cols - 1) = _src.at<uchar>(i, _src.cols - 1);
+		}
+	}
+	_src.release();
+
+	if (orientation == 'y')
+		_dst = _dst.t();
+
+	dst.release();
+	dst = _dst;
 }

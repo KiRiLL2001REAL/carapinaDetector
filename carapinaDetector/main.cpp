@@ -31,7 +31,12 @@ void processGrayMat(cv::Mat& mat) {
     // приводим их к размерности 8
     convertScaleAbs(gradX, absGradX);
     convertScaleAbs(gradY, absGradY);
-    addWeighted(absGradX, 0.5, absGradY, 0.5, 0, grad);
+
+    Mat filteredX, filteredY;
+    extra::filterStrong(absGradX, filteredX, 'x');
+    extra::filterStrong(absGradY, filteredY, 'y');
+
+    addWeighted(filteredX, 0.5, filteredY, 0.5, 0, grad);
 
     // === вычисляем пороговое значение для theshold
     long long counts[256]; memset(counts, 0, sizeof(long long) * 256);
@@ -53,6 +58,7 @@ void processGrayMat(cv::Mat& mat) {
     // === используя ранее найденное пороговое значение, преобразуем матрицу
     threshold(grad, grad, minPixel, 255, THRESH_BINARY);
 
+    /*
     // === раздуваем пиксели до диаметра kernelSize
     int kernelSize = 3;
     Mat kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
@@ -83,12 +89,15 @@ void processGrayMat(cv::Mat& mat) {
 
     // === заливаем пустоты в контурах
     grad = extra::imfill(grad);
+    */
 
 
     gradX.release();
     gradY.release();
     absGradX.release();
     absGradY.release();
+    filteredX.release();
+    filteredY.release();
     blured.release();
     mat.release();
 
