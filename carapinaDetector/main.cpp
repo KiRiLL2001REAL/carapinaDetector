@@ -58,16 +58,17 @@ void processGrayMat(cv::Mat& mat) {
     // === используя ранее найденное пороговое значение, преобразуем матрицу
     threshold(grad, grad, minPixel, 255, THRESH_BINARY);
 
-    /*
     // === раздуваем пиксели до диаметра kernelSize
-    int kernelSize = 3;
+    int kernelSize = 5;
     Mat kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
+    
     dilate(grad, grad, kernel);
-
+    
+    
     // === пытаемся отфильтровать "шум" раскрытием и закрытием областей
-    morphologyEx(grad, grad, MORPH_OPEN, kernel);
-    morphologyEx(grad, grad, MORPH_CLOSE, kernel);
-
+    //morphologyEx(grad, grad, MORPH_OPEN, kernel);
+    //morphologyEx(grad, grad, MORPH_CLOSE, kernel);
+    /*
     // === отсеиваем мелкие контуры
     vector<vector<cv::Point>> contours;
     vector<cv::Vec4i> hierarchy;
@@ -82,7 +83,7 @@ void processGrayMat(cv::Mat& mat) {
 
     // === пытаемся замкнуть оставшиеся контуры 
     dilate(grad, grad, kernel);
-    kernelSize = 5;
+    kernelSize = 10;
     kernel.release();
     kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
     morphologyEx(grad, grad, MORPH_CLOSE, kernel);
