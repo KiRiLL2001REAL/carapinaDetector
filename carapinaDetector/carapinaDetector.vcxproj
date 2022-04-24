@@ -156,6 +156,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cnn.hpp" />
+    <ClInclude Include="cnn_config.hpp" />
     <ClInclude Include="extra.hpp" />
     <ClInclude Include="json.hpp" />
   </ItemGroup>
