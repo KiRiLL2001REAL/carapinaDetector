@@ -5,8 +5,10 @@
 #include <vector>
 
 #include "extra.hpp"
+#include "cnn.hpp"
+#include "cnn_config.hpp"
 
-const std::string DATASET_PATH = "D:\\Dataset\\hackaton1";
+const std::string DATASET_PATH = "D:\\Dataset";
 
 void processGrayMat(cv::Mat& mat) {
     using namespace cv;
@@ -58,11 +60,21 @@ void processGrayMat(cv::Mat& mat) {
     // === используя ранее найденное пороговое значение, преобразуем матрицу
     threshold(grad, grad, minPixel, 255, THRESH_BINARY);
 
+    // === ищем царапины сеткой
+    Rect2i crop(0, 0, 64, 64);
+    for (int i = 31; i < grad.rows - 32; i++)
+        for (int j = 31; j < grad.cols - 32; j++)
+            if (grad.at<uchar>(i, j) == 255) {
+                crop.x = j - 31;
+                crop.y = i - 31;
+                // скормить mat(crop) сетке
+            }
+
     // === раздуваем пиксели до диаметра kernelSize
-    int kernelSize = 5;
-    Mat kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
+    //int kernelSize = 5;
+    //Mat kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
     
-    dilate(grad, grad, kernel);
+    //dilate(grad, grad, kernel);
     
     
     // === пытаемся отфильтровать "шум" раскрытием и закрытием областей
@@ -148,7 +160,7 @@ int main()
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
     cout << "Showed file \"" << imagePath[0] << "\"\n";
     processGrayMat(grayMat);
-    cv::imwrite(imagePath[0] + ".jpg", grayMat);
+    //cv::imwrite(imagePath[0] + ".jpg", grayMat);
 
     extra::cvtGrayMatToImage(grayMat, image);
     texture.loadFromImage(image);
@@ -183,7 +195,7 @@ int main()
                 grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
                 cout << "Showed file \"" << imagePath[counter] << "\"\n";
                 processGrayMat(grayMat);
-                cv::imwrite(imagePath[counter] + ".jpg", grayMat);
+                //cv::imwrite(imagePath[counter] + ".jpg", grayMat);
 
                 extra::cvtGrayMatToImage(grayMat, image);
                 texture.loadFromImage(image);

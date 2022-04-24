@@ -23,5 +23,11 @@
     <ClInclude Include="extra.hpp">
       <Filter>Исходные файлы</Filter>
     </ClInclude>
+    <ClInclude Include="cnn.hpp">
+      <Filter>Исходные файлы</Filter>
+    </ClInclude>
+    <ClInclude Include="json.hpp">
+      <Filter>Исходные файлы</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
