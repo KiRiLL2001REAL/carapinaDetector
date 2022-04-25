@@ -10,9 +10,44 @@
 #include "cnn.hpp"
 #include "cnn_config.hpp"
 
-const std::string DATASET_PATH = "D:\\testDataset";
+const std::string DATASET_PATH = "D:\\data";
 
-void processGrayMat(cv::Mat& mat) {
+void doClucterization(map<int, map<int, pair<int, int>>>& points, int windowSizeRadius = 16) {
+
+    for (auto& xIt : points) {
+        for (auto& yIt : xIt.second) {
+            // while
+            vector<map<int, pair<int, int>>> interval;
+
+            // получаем точки, лежащие в определённом диапазоне
+            int leftBorder = xIt.first - windowSizeRadius;  //xIt.first - значение при инициализации (до while)
+            int rightBorder = xIt.first + windowSizeRadius;
+            for (auto xrit = points.rbegin(); xrit != points.rend() && xrit->first >= leftBorder; ++xrit) {
+                interval.push_back(xIt.second);
+            }
+            for (auto xrit = points.begin(); xrit != points.end() && xrit->first <= rightBorder; ++xrit) {
+                interval.push_back(xIt.second);
+            }
+
+            vector<pair<int, int>> rectZone;
+            int upperBorder = yIt.first - windowSizeRadius;  //yIt.first - значение при инициализации (до while)
+            int bottomBorder = yIt.first + windowSizeRadius;
+            for (size_t i = 0; i < interval.size(); i++) {
+                for (auto yrit = interval[i].rbegin(); yrit != interval[i].rend() && yrit->first >= leftBorder; ++yrit) {
+                    rectZone.push_back(yrit->second);
+                }
+                for (auto yrit = interval[i].begin(); yrit != interval[i].end() && yrit->first <= rightBorder; ++yrit) {
+                    rectZone.push_back(yrit->second);
+                }
+            }
+            cv::Mat a;
+            a.release();
+        }
+    }
+
+}
+
+void processGrayMat(cv::Mat& mat, const std::string& path) {
     using namespace cv;
     using namespace std;
     sf::Clock timer;
@@ -36,12 +71,18 @@ void processGrayMat(cv::Mat& mat) {
     convertScaleAbs(gradX, absGradX);
     convertScaleAbs(gradY, absGradY);
 
+    addWeighted(absGradX, 0.5, absGradX, 0.5, 0, grad);
+
+    Canny(grad, grad, 20, 70, 3);
+
+    /*
     Mat filteredX, filteredY;
     extra::filterStrong(absGradX, filteredX, 'x');
     extra::filterStrong(absGradY, filteredY, 'y');
 
     addWeighted(filteredX, 0.5, filteredY, 0.5, 0, grad);
 
+    /*
     // === вычисляем пороговое значение для theshold
     long long counts[256]; memset(counts, 0, sizeof(long long) * 256);
     for (auto pointer = grad.datastart; pointer != grad.dataend; pointer++) {
@@ -61,6 +102,9 @@ void processGrayMat(cv::Mat& mat) {
 
     // === используя ранее найденное пороговое значение, преобразуем матрицу
     threshold(grad, grad, minPixel, 255, THRESH_BINARY);
+    */
+
+    imwrite(path + "_granitsi.bmp", grad);
 
     // левый верхний угол интересных областей
     map<int, map<int, bool>> contours = {};
@@ -71,7 +115,7 @@ void processGrayMat(cv::Mat& mat) {
             }
 
     cnn::Tensor t;
-    map<int, map<int, bool>> pointsOfInterest = {}; // на что среагировала сетка
+    map<int, map<int, pair<int, int>>> clusterCenter = {}; // на что среагировала сетка
     // === ищем царапины сеткой
     Rect2i crop(0, 0, 64, 64);
     for (auto& xIt : contours) {
@@ -82,29 +126,30 @@ void processGrayMat(cv::Mat& mat) {
             if (t[0] <= 0.8)
                 grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
             else
-                pointsOfInterest[crop.x][crop.y] = true;
+                clusterCenter[crop.x][crop.y] = {crop.x, crop.y};
         }
     }
 
-    
+    // === кластеризация
+    doClucterization(clusterCenter, 16);
 
-    /*
-    vector<vector<cv::Point>> contours;
-    vector<cv::Vec4i> hierarchy;
-    findContours(grad, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_TC89_KCOS);
-    grad = Mat::zeros(grad.size(), CV_8U); // перерисовОчка
-    for (size_t i = 0; i < contours.size(); i++) {
-        drawContours(grad, contours, (int)i, {255}, 1, cv::LINE_8, hierarchy, 0);
-    }
-    */
+    ///*
+    //vector<vector<cv::Point>> contours;
+    //vector<cv::Vec4i> hierarchy;
+    //findContours(grad, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_TC89_KCOS);
+    //grad = Mat::zeros(grad.size(), CV_8U); // перерисовОчка
+    //for (size_t i = 0; i < contours.size(); i++) {
+    //    drawContours(grad, contours, (int)i, {255}, 1, cv::LINE_8, hierarchy, 0);
+    //}
+    //*/
 
 
     gradX.release();
     gradY.release();
     absGradX.release();
     absGradY.release();
-    filteredX.release();
-    filteredY.release();
+    /*filteredX.release();
+    filteredY.release();*/
     blured.release();
     mat.release();
 
@@ -157,8 +202,8 @@ int main()
 
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
     cout << "Showed file \"" << imagePath[0] << "\"\n";
-    processGrayMat(grayMat);
-    cv::imwrite(imagePath[0] + "2.jpg", grayMat);
+    processGrayMat(grayMat, imagePath[0]);
+    //cv::imwrite(imagePath[0] + ".jpg", grayMat);
 
     extra::cvtGrayMatToImage(grayMat, image);
     texture.loadFromImage(image);
@@ -192,8 +237,8 @@ int main()
                 grayMat.release();
                 grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
                 cout << "Showed file \"" << imagePath[counter] << "\"\n";
-                processGrayMat(grayMat);
-                cv::imwrite(imagePath[counter] + "2.jpg", grayMat);
+                processGrayMat(grayMat, imagePath[counter]);
+                //cv::imwrite(imagePath[counter] + ".jpg", grayMat);
 
                 extra::cvtGrayMatToImage(grayMat, image);
                 texture.loadFromImage(image);
