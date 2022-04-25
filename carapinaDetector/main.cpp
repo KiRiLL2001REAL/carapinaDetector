@@ -3,12 +3,14 @@
 #include <SFML/Graphics.hpp>
 #include <string>
 #include <vector>
+#include <map>
+#include <fstream>
 
 #include "extra.hpp"
 #include "cnn.hpp"
 #include "cnn_config.hpp"
 
-const std::string DATASET_PATH = "D:\\Dataset";
+const std::string DATASET_PATH = "D:\\testDataset";
 
 void processGrayMat(cv::Mat& mat) {
     using namespace cv;
@@ -60,48 +62,40 @@ void processGrayMat(cv::Mat& mat) {
     // === используя ранее найденное пороговое значение, преобразуем матрицу
     threshold(grad, grad, minPixel, 255, THRESH_BINARY);
 
-    // === ищем царапины сеткой
-    Rect2i crop(0, 0, 64, 64);
+    // левый верхний угол интересных областей
+    map<int, map<int, bool>> contours = {};
     for (int i = 31; i < grad.rows - 32; i++)
         for (int j = 31; j < grad.cols - 32; j++)
             if (grad.at<uchar>(i, j) == 255) {
-                crop.x = j - 31;
-                crop.y = i - 31;
-                // скормить mat(crop) сетке
+                contours[j - 31][i - 31] = true;
             }
 
-    // === раздуваем пиксели до диаметра kernelSize
-    //int kernelSize = 5;
-    //Mat kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
-    
-    //dilate(grad, grad, kernel);
-    
-    
-    // === пытаемся отфильтровать "шум" раскрытием и закрытием областей
-    //morphologyEx(grad, grad, MORPH_OPEN, kernel);
-    //morphologyEx(grad, grad, MORPH_CLOSE, kernel);
-    /*
-    // === отсеиваем мелкие контуры
-    vector<vector<cv::Point>> contours;
-    vector<cv::Vec4i> hierarchy;
-    double minSize = 1000;
-    findContours(grad, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_TC89_KCOS);
-    grad = Mat::zeros(grad.size(), CV_8U); // перерисовОчка
-    for (size_t i = 0; i < contours.size(); i++) {
-        if (contourArea(contours[i]) > minSize) {
-            drawContours(grad, contours, (int)i, {255}, 1, cv::LINE_8, hierarchy, 0);
+    cnn::Tensor t;
+    map<int, map<int, bool>> pointsOfInterest = {}; // на что среагировала сетка
+    // === ищем царапины сеткой
+    Rect2i crop(0, 0, 64, 64);
+    for (auto& xIt : contours) {
+        crop.x = xIt.first;
+        for (auto& yIt : xIt.second) {
+            crop.y = yIt.first;
+            t = forward(matToTensor(mat(crop)));
+            if (t[0] <= 0.8)
+                grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
+            else
+                pointsOfInterest[crop.x][crop.y] = true;
         }
     }
 
-    // === пытаемся замкнуть оставшиеся контуры 
-    dilate(grad, grad, kernel);
-    kernelSize = 10;
-    kernel.release();
-    kernel = getStructuringElement(MORPH_ELLIPSE, { kernelSize, kernelSize });
-    morphologyEx(grad, grad, MORPH_CLOSE, kernel);
+    
 
-    // === заливаем пустоты в контурах
-    grad = extra::imfill(grad);
+    /*
+    vector<vector<cv::Point>> contours;
+    vector<cv::Vec4i> hierarchy;
+    findContours(grad, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_TC89_KCOS);
+    grad = Mat::zeros(grad.size(), CV_8U); // перерисовОчка
+    for (size_t i = 0; i < contours.size(); i++) {
+        drawContours(grad, contours, (int)i, {255}, 1, cv::LINE_8, hierarchy, 0);
+    }
     */
 
 
@@ -126,9 +120,6 @@ int main()
     const int WIN_WIDTH = 1200;
     const int WIN_HEIGHT = 700;
 
-    const int LOW_TRESHOLD = 20;
-    const int HIGH_TRESHOLD = 70;
-
     vector<string> imagePath = {};
 
     extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
@@ -139,6 +130,13 @@ int main()
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
         return 0;
     }
+
+    // загрузка весов сетки
+    fstream f("weights182.json", ios::in);
+    nlohmann::json weights;
+    f >> weights;
+    loadFromJson(weights);
+    f.close();
 
     sf::ContextSettings settings;
     settings.antialiasingLevel = 16;
@@ -160,7 +158,7 @@ int main()
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
     cout << "Showed file \"" << imagePath[0] << "\"\n";
     processGrayMat(grayMat);
-    //cv::imwrite(imagePath[0] + ".jpg", grayMat);
+    cv::imwrite(imagePath[0] + "2.jpg", grayMat);
 
     extra::cvtGrayMatToImage(grayMat, image);
     texture.loadFromImage(image);
@@ -195,7 +193,7 @@ int main()
                 grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
                 cout << "Showed file \"" << imagePath[counter] << "\"\n";
                 processGrayMat(grayMat);
-                //cv::imwrite(imagePath[counter] + ".jpg", grayMat);
+                cv::imwrite(imagePath[counter] + "2.jpg", grayMat);
 
                 extra::cvtGrayMatToImage(grayMat, image);
                 texture.loadFromImage(image);

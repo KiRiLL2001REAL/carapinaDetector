@@ -5,21 +5,23 @@
 #include "cnn.hpp"
 
 using namespace std;
-using namespace cnn;
-using namespace cv;
 
-ConvLayer			c1(TensorSize(64, 64, 1), 8, 7, 3, 2);
-ReLULayer			r1(c1.getOutputSize());
-MaxPoolingLayer		p1(r1.getOutputSize(), 2);
-ConvLayer			c2(p1.getOutputSize(), 4, 5, 2, 2);
-ReLULayer			r2(c2.getOutputSize());
-FullyConnectedLayer	f3(r2.getOutputSize(), 32, "relu");
-FullyConnectedLayer	f4(f3.getOutputSize(), 16, "relu");
-FullyConnectedLayer	f5(f4.getOutputSize(), 1, "sigmoid");
-Tensor x1, x2, x3, x4, x5, x6, x7, x8;
+namespace setka {
+	using namespace cnn;
+	ConvLayer			c1(TensorSize(64, 64, 1), 8, 7, 3, 2);
+	ReLULayer			r1(c1.getOutputSize());
+	MaxPoolingLayer		p1(r1.getOutputSize(), 2);
+	ConvLayer			c2(p1.getOutputSize(), 4, 5, 2, 2);
+	ReLULayer			r2(c2.getOutputSize());
+	FullyConnectedLayer	f3(r2.getOutputSize(), 32, "relu");
+	FullyConnectedLayer	f4(f3.getOutputSize(), 16, "relu");
+	FullyConnectedLayer	f5(f4.getOutputSize(), 1, "sigmoid");
+	Tensor x1, x2, x3, x4, x5, x6, x7, x8;
+}
 
 nlohmann::json getJson()
 {
+	using namespace setka;
 	nlohmann::json js = {};
 	js["c1"] = c1.getJson();
 	js["r1"] = r1.getJson();
@@ -34,6 +36,7 @@ nlohmann::json getJson()
 
 void loadFromJson(const nlohmann::json& js)
 {
+	using namespace setka;
 	c1 = ConvLayer(js["c1"]);
 	r1 = ReLULayer(js["r1"]);
 	p1 = MaxPoolingLayer(js["p1"]);
@@ -44,29 +47,9 @@ void loadFromJson(const nlohmann::json& js)
 	f5 = FullyConnectedLayer(js["f5"]);
 }
 
-vector <Mat> tensorToMat(Tensor& m)
+cnn::Tensor forward(cnn::Tensor x)
 {
-	vector <Mat> output = {};
-	int width = m.getSize().width;
-	int height = m.getSize().height;
-	for (int d = 0; d < m.getSize().depth; d++)
-	{
-		Mat output1(height, width, CV_8U);
-		for (int i = 0; i < width; i++)
-		{
-			for (int j = 0; j < height; j++)
-			{
-				output1.data[i * height + j] = m(d, i, j) * 256;
-			}
-		}
-		output.push_back(output1);
-	}
-	return output;
-}
-
-Tensor forward(Tensor x)
-{
-	vector <Mat> output;
+	using namespace setka;
 	x1 = x;
 	x = c1.forward(x);
 	x2 = x;
@@ -86,8 +69,9 @@ Tensor forward(Tensor x)
 	return x;
 }
 
-void backward(Tensor dX, double learning_rate)
+void backward(cnn::Tensor dX, double learning_rate)
 {	
+	using namespace setka;
 	dX = f5.backward(dX, x8);
 	f5.updateWeights(learning_rate);
 	dX = f4.backward(dX, x7);
@@ -103,11 +87,11 @@ void backward(Tensor dX, double learning_rate)
 	c1.updateWeights(learning_rate);
 }
 
-Tensor matToTensor(Mat& m)
+cnn::Tensor matToTensor(const cv::Mat& m)
 {
 	int width = m.size().width;
 	int height = m.size().height;
-	Tensor t(width, height, 1);
+	cnn::Tensor t(width, height, 1);
 	for (int i = 0; i < width; i++)
 		for (int j = 0; j < height; j++)
 			t(0, i, j) = m.data[i * height + j] / 255.0;
