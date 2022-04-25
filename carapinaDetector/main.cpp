@@ -10,7 +10,9 @@
 #include "cnn.hpp"
 #include "cnn_config.hpp"
 
-const std::string DATASET_PATH = "D:\\data";
+using namespace std;
+
+const std::string DATASET_PATH = "D:\\Dataset";
 
 void doClucterization(map<int, map<int, pair<int, int>>>& points, int windowSizeRadius = 16) {
 
@@ -47,7 +49,7 @@ void doClucterization(map<int, map<int, pair<int, int>>>& points, int windowSize
 
 }
 
-void processGrayMat(cv::Mat& mat, const std::string& path) {
+void processGrayMat(cv::Mat& mat, const std::string& path, CNN_Controller& cnnc) {
     using namespace cv;
     using namespace std;
     sf::Clock timer;
@@ -75,37 +77,6 @@ void processGrayMat(cv::Mat& mat, const std::string& path) {
 
     Canny(grad, grad, 20, 70, 3);
 
-    /*
-    Mat filteredX, filteredY;
-    extra::filterStrong(absGradX, filteredX, 'x');
-    extra::filterStrong(absGradY, filteredY, 'y');
-
-    addWeighted(filteredX, 0.5, filteredY, 0.5, 0, grad);
-
-    /*
-    // === вычисляем пороговое значение для theshold
-    long long counts[256]; memset(counts, 0, sizeof(long long) * 256);
-    for (auto pointer = grad.datastart; pointer != grad.dataend; pointer++) {
-        counts[*pointer]++;
-    }
-    for (int i = 0; i < 4; i++)
-        counts[i] = 0;
-    long long sum = 0;
-    for (int i = 0; i < 256; i++)
-        sum += counts[i];
-
-    long long sumLocal = 0;
-    int minPixel = 256;
-    double koeff = 0.10;
-    while (sumLocal < sum * koeff)
-        sumLocal += counts[--minPixel];
-
-    // === используя ранее найденное пороговое значение, преобразуем матрицу
-    threshold(grad, grad, minPixel, 255, THRESH_BINARY);
-    */
-
-    imwrite(path + "_granitsi.bmp", grad);
-
     // левый верхний угол интересных областей
     map<int, map<int, bool>> contours = {};
     for (int i = 31; i < grad.rows - 32; i++)
@@ -114,24 +85,50 @@ void processGrayMat(cv::Mat& mat, const std::string& path) {
                 contours[j - 31][i - 31] = true;
             }
 
-    cnn::Tensor t;
+    
     map<int, map<int, pair<int, int>>> clusterCenter = {}; // на что среагировала сетка
+
     // === ищем царапины сеткой
-    Rect2i crop(0, 0, 64, 64);
+    vector<Rect2i> crops;
     for (auto& xIt : contours) {
-        crop.x = xIt.first;
         for (auto& yIt : xIt.second) {
-            crop.y = yIt.first;
-            t = forward(matToTensor(mat(crop)));
-            if (t[0] <= 0.8)
+            crops.emplace_back(xIt.first, yIt.first, 64, 64);
+        }
+    }
+
+    int stored = 0;
+    int border = cnnc.getMaxThreads() * 64;
+    vector<cnn::Tensor> input;
+    for (size_t i = 0; i < crops.size(); i++) {
+        input.emplace_back(CNN_Controller::matToTensor(mat(crops[i])));
+        stored++;
+        if (stored >= border) {
+            auto result = cnnc.forward(input);
+            input.clear();
+            for (size_t j = 0, ii = i + 1 - stored; j < result.size(); j++, ii++) {
+                Rect2i& crop = crops[ii];
+                if (result[j][0] <= 0.8)
+                    grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
+                else
+                    clusterCenter[crop.x][crop.y] = { crop.x, crop.y };
+            }
+            stored = 0;
+        }
+    }
+    if (stored > 0) {
+        auto result = cnnc.forward(input);
+        input.clear();
+        for (size_t j = 0, ii = crops.size() - stored; j < result.size(); j++, ii++) {
+            Rect2i& crop = crops[ii];
+            if (result[j][0] <= 0.8)
                 grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
             else
-                clusterCenter[crop.x][crop.y] = {crop.x, crop.y};
+                clusterCenter[crop.x][crop.y] = { crop.x, crop.y };
         }
     }
 
     // === кластеризация
-    doClucterization(clusterCenter, 16);
+    //doClucterization(clusterCenter, 16);
 
     ///*
     //vector<vector<cv::Point>> contours;
@@ -148,8 +145,6 @@ void processGrayMat(cv::Mat& mat, const std::string& path) {
     gradY.release();
     absGradX.release();
     absGradY.release();
-    /*filteredX.release();
-    filteredY.release();*/
     blured.release();
     mat.release();
 
@@ -180,7 +175,8 @@ int main()
     fstream f("weights182.json", ios::in);
     nlohmann::json weights;
     f >> weights;
-    loadFromJson(weights);
+    CNN_Controller controller;
+    controller.initFromJson(weights);
     f.close();
 
     sf::ContextSettings settings;
@@ -202,7 +198,7 @@ int main()
 
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
     cout << "Showed file \"" << imagePath[0] << "\"\n";
-    processGrayMat(grayMat, imagePath[0]);
+    processGrayMat(grayMat, imagePath[0], controller);
     //cv::imwrite(imagePath[0] + ".jpg", grayMat);
 
     extra::cvtGrayMatToImage(grayMat, image);
@@ -237,7 +233,7 @@ int main()
                 grayMat.release();
                 grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
                 cout << "Showed file \"" << imagePath[counter] << "\"\n";
-                processGrayMat(grayMat, imagePath[counter]);
+                processGrayMat(grayMat, imagePath[counter], controller);
                 //cv::imwrite(imagePath[counter] + ".jpg", grayMat);
 
                 extra::cvtGrayMatToImage(grayMat, image);

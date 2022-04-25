@@ -1,6 +1,6 @@
 #pragma once
 
-#include <opencv2/opencv.hpp>
+#include <opencv2/Core.hpp>
 #include <string>
 #include <vector>
 #include <random>
@@ -62,10 +62,8 @@ private:
 	}
 
 public:
-	// конструктор-заглушка
-	Tensor() {
-		init(1, 1, 1);
-	};
+	// Конструктор-заглушка.
+	Tensor() : Tensor(1, 1, 1) {}
 	// создание из размеров
 	Tensor(int width, int height, int depth) {
 		init(width, height, depth);
@@ -193,7 +191,13 @@ private:
 	};
 
 public:
-	// создание слоя
+	/*
+	Конструктор-заглушка.
+	Использовать только при необходимости объявления массива элементов
+	данного   типа.  Не  забудьте   вызвать  нормальный   конструктор.
+	*/
+	ConvLayer() : ConvLayer(TensorSize(1, 1, 1), 1, 1, 1, 1) {}
+	// конструктор свёрточного слоя
 	ConvLayer(TensorSize size, int fc, int fs, int P, int S) :
 		distribution(0.0, sqrt(2.0 / ((size_t)fs * fs * size.depth)))
 	{
@@ -224,7 +228,7 @@ public:
 
 		initWeights(); // инициализируем весовые коэффициенты
 	}
-	// создание слоя из Json
+	// конструктор свёрточного слоя из Json
 	ConvLayer(nlohmann::json js) {
 		// входной размер
 		inputSize.width = js["inputSize"]["w"].get<int>();
@@ -430,7 +434,13 @@ private:
 	Tensor mask;
 
 public:
-	// создание слоя
+	/*
+	Конструктор-заглушка.
+	Использовать только при необходимости объявления массива элементов
+	данного   типа.  Не  забудьте   вызвать  нормальный   конструктор.
+	*/
+	MaxPoolingLayer() : MaxPoolingLayer(TensorSize(1, 1, 1)) {}
+	// конструктор maxpool слоя
 	MaxPoolingLayer(TensorSize size, int scale = 2) :
 		mask(size)
 	{
@@ -453,7 +463,7 @@ public:
 				for (int j = 0; j < outputSize.width; j++)
 					mask(d, i, j) = (double)rand() / RAND_MAX;
 	}
-	// создание слоя из Json
+	// конструктор maxpool слоя из Json
 	MaxPoolingLayer(nlohmann::json js) {
 		// входной размер
 		inputSize.width = js["inputSize"]["w"].get<int>();
@@ -541,11 +551,17 @@ private:
 	TensorSize size;
 
 public:
-	// создание слоя
+	/*
+	Конструктор-заглушка.
+	Использовать только при необходимости объявления массива элементов
+	данного   типа.  Не  забудьте   вызвать  нормальный   конструктор.
+	*/
+	ReLULayer() : ReLULayer(TensorSize(1, 1, 1)) {}
+	// конструктор слоя-активатора ReLU
 	ReLULayer(TensorSize size) {
 		this->size = size; // сохраняем размер
 	}
-	// создание слоя из Json
+	// конструктор слоя-активатора ReLU из Json
 	ReLULayer(nlohmann::json js) {
 		size.width = js["size"]["w"].get<int>();
 		size.height = js["size"]["h"].get<int>();
@@ -597,11 +613,17 @@ private:
 	TensorSize size;
 
 public:
-	// создание слоя
+	/*
+	Конструктор-заглушка.
+	Использовать только при необходимости объявления массива элементов
+	данного   типа.  Не  забудьте   вызвать  нормальный   конструктор.
+	*/
+	SigmoidLayer() : SigmoidLayer(TensorSize(1, 1, 1)) {}
+	// конструктор слоя-активатора sigmoid
 	SigmoidLayer(TensorSize size) {
 		this->size = size; // сохраняем размер
 	}
-	// создание слоя из Json
+	// конструктор слоя-активатора sigmoid из Json
 	SigmoidLayer(nlohmann::json js) {
 		size.width = js["size"]["w"].get<int>();
 		size.height = js["size"]["h"].get<int>();
@@ -657,12 +679,8 @@ private:
 	std::vector<double> values;
 
 public:
-	// конструктор-заглушка
-	Matrix() {
-		rows = 1;
-		columns = 1;
-		values = std::vector<double>((size_t)rows * columns, 0); // создаём векторы для значений матрицы
-	}
+	// Конструктор-заглушка.
+	Matrix() : Matrix(1, 1) {}
 	// конструктор из заданных размеров
 	Matrix(int rows, int columns) {
 		this->rows = rows; // сохраняем число строк
@@ -836,7 +854,13 @@ private:
 	}
 
 public:
-	// создание слоя
+	/*
+	Конструктор-заглушка.
+	Использовать только при необходимости объявления массива элементов
+	данного   типа.  Не  забудьте   вызвать  нормальный   конструктор.
+	*/
+	FullyConnectedLayer() : FullyConnectedLayer(TensorSize(1, 1, 1), 1) {}
+	// конструктор полносвязного слоя
 	FullyConnectedLayer(TensorSize size, int outputs, const std::string& activationType = "none") : // создание слоя
 		distribution(0.0, sqrt(2.0 / ((size_t)size.height * size.width * size.depth))),
 		df(1, 1, outputs),
@@ -862,7 +886,7 @@ public:
 
 		initWeights(); // инициализируем весовые коэффициенты		
 	}
-	// создание слоя из Json
+	// конструктор полносвязного слоя из Json
 	FullyConnectedLayer(nlohmann::json js) {
 		// входной размер
 		inputSize.width = js["inputSize"]["w"].get<int>();
