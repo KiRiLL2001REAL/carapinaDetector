@@ -53,8 +53,8 @@ void processGrayMat(cv::Mat& mat, int c, const std::string& path, vector<vector<
             for (int j = 0; j < 33; j++)
                 matrix[i][j] = submat.at<uchar>(i, j);
 
-        int dist = getMinOtkl(matrix, vec3);
-        if (dist < threshold) {
+        int dist = getMinOtkl(matrix, vec3, threshold);
+        if (dist != -1 && dist < threshold) {
             cv::line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
         }
     }

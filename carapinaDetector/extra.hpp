@@ -52,7 +52,7 @@ void extra::cvtRGBMatToImage(const cv::Mat& mat, sf::Image& image)
 	tmpMat.release();
 }
 
-long long srkvotkl(vector<vector<int>>& src, vector<vector<int>>& dst) {
+long long srkvotkl(vector<vector<int>>& src, vector<vector<int>>& dst, int& threshold) {
 	long long res = 0;
 	int loc;
 	for (int i = 0; i < dst.size(); i++) {
@@ -60,18 +60,22 @@ long long srkvotkl(vector<vector<int>>& src, vector<vector<int>>& dst) {
 			loc = dst[i][j] - src[i][j];
 			res += (long long)loc * loc;
 		}
+		if (threshold <= res)
+			return -1;
 	}
 	return res;
 }
 
-int getMinOtkl(vector<vector<int>>& src, vector<vector<vector<int>>>dst) {
-	long long minsqr = srkvotkl(src, dst[0]);
+int getMinOtkl(vector<vector<int>>& src, vector<vector<vector<int>>>dst, int& threshold) {
+	long long minsqr = srkvotkl(src, dst[0], threshold);
 	for (int i = 1; i < dst.size(); i++) {
-		long long s = srkvotkl(src, dst[i]);
-		if (s < minsqr) {
+		long long s = srkvotkl(src, dst[i], threshold);
+		if ((s < minsqr || minsqr == -1) && s >= 0) {
 			minsqr = s;
 		}
 	}
+	if (minsqr == -1)
+		return minsqr;
 	return minsqr / 1089;
 }
 
