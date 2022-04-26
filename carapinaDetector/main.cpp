@@ -11,7 +11,7 @@ using namespace std;
 
 const std::string DATASET_PATH = "D:\\data";
 
-void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controller& cnnc*/) {
+void processGrayMat(cv::Mat& mat, int c, const std::string& path, vector<vector<vector<int>>>& vec3, int threshold) {
     using namespace cv;
     using namespace std;
     sf::Clock timer;
@@ -22,7 +22,7 @@ void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controll
     blur(mat, blured, Size(bSize, bSize));
     Canny(blured, blured, 20, 50, 3);
 
-    string catalog = "D:\\data\\out\\" + to_string(c);
+    string catalog = "D:\\data1\\";
     filesystem::create_directories(catalog);
 
     Mat rgb;
@@ -34,7 +34,7 @@ void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controll
     for (size_t i = 0; i < linesP.size(); i++)
     {
         cv::Vec4i l = linesP[i];
-        cv::line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+        
         int cx = (l[0] + l[2]) / 2;
         int cy = (l[1] + l[3]) / 2;
         int x0 = cx - 16;
@@ -43,10 +43,22 @@ void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controll
         int y1 = cy + 17;
         if (x0 < 0 || y0 < 0 || x1 >= mat.size().width || y1 >= mat.size().height)
             continue;
+
         Rect2i crop = Rect2i(Point2i(x0, y0), Point2i(x1, y1));
-        imwrite(catalog + "\\" + to_string(i) + ".bmp", mat(crop));
+        //imwrite(catalog + "\\" + to_string(i) + ".bmp", mat(crop));
+
+        Mat submat = mat(crop);
+        vector<vector<int>> matrix(33, vector<int>(33));
+        for (int i = 0; i < 33; i++)
+            for (int j = 0; j < 33; j++)
+                matrix[i][j] = submat.at<uchar>(i, j);
+
+        int dist = getMinOtkl(matrix, vec3);
+        if (dist < threshold) {
+            cv::line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+        }
     }
-    imwrite("D:\\data\\out\\" + to_string(c) + ".jpg", rgb);
+    imwrite("D:\\data1\\" + to_string(c) + ".jpg", rgb);
 
     cvtColor(rgb, rgb, COLOR_RGB2BGR);
 
@@ -63,6 +75,10 @@ int main()
 
     const int WIN_WIDTH = 1200;
     const int WIN_HEIGHT = 700;
+
+    vector<vector<vector<int>>> vec3;
+    int threshold;
+    loadFromFile("D:\\weights.txt", vec3, threshold);
 
     vector<string> imagePath = {};
 
@@ -94,7 +110,7 @@ int main()
 
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
     cout << "Showed file \"" << imagePath[0] << "\"\n";
-    processGrayMat(grayMat, 0, imagePath[0]/*, controller*/);
+    processGrayMat(grayMat, 0, imagePath[0], vec3, threshold);
     //cv::imwrite(imagePath[0] + ".jpg", grayMat);
 
     extra::cvtRGBMatToImage(grayMat, image);
@@ -129,7 +145,7 @@ int main()
                 grayMat.release();
                 grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
                 cout << "Showed file \"" << imagePath[counter] << "\"\n";
-                processGrayMat(grayMat, counter, imagePath[counter]/*, controller */ );
+                processGrayMat(grayMat, counter, imagePath[counter], vec3, threshold);
                 //cv::imwrite(imagePath[counter] + ".jpg", grayMat);
 
                 extra::cvtRGBMatToImage(grayMat, image);

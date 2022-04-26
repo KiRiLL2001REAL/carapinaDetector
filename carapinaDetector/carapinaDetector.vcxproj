@@ -155,11 +155,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="cnn.hpp" />
-    <ClInclude Include="cnn_config.hpp" />
     <ClInclude Include="extra.hpp" />
-    <ClInclude Include="json.hpp" />
-    <ClInclude Include="threadPool.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
