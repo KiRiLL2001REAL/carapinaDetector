@@ -23,16 +23,7 @@
     <ClInclude Include="extra.hpp">
       <Filter>Исходные файлы</Filter>
     </ClInclude>
-    <ClInclude Include="cnn.hpp">
-      <Filter>Исходные файлы</Filter>
-    </ClInclude>
     <ClInclude Include="json.hpp">
-      <Filter>Исходные файлы</Filter>
-    </ClInclude>
-    <ClInclude Include="cnn_config.hpp">
-      <Filter>Исходные файлы</Filter>
-    </ClInclude>
-    <ClInclude Include="threadPool.hpp">
       <Filter>Исходные файлы</Filter>
     </ClInclude>
   </ItemGroup>

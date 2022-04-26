@@ -30,7 +30,6 @@ void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controll
     // Probabilistic Line Transform
     vector<cv::Vec4i> linesP; // will hold the results of the detection
     cv::HoughLinesP(blured, linesP, 2, CV_PI / 90, 30, 40, 15); // runs the actual detection
-    // Draw the lines
     for (size_t i = 0; i < linesP.size(); i++)
     {
         cv::Vec4i l = linesP[i];
@@ -94,8 +93,7 @@ int main()
 
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
     cout << "Showed file \"" << imagePath[0] << "\"\n";
-    processGrayMat(grayMat, 0, imagePath[0]/*, controller*/);
-    //cv::imwrite(imagePath[0] + ".jpg", grayMat);
+    processGrayMat(grayMat, 0, imagePath[0]);
 
     extra::cvtRGBMatToImage(grayMat, image);
     texture.loadFromImage(image);
@@ -129,8 +127,7 @@ int main()
                 grayMat.release();
                 grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
                 cout << "Showed file \"" << imagePath[counter] << "\"\n";
-                processGrayMat(grayMat, counter, imagePath[counter]/*, controller */ );
-                //cv::imwrite(imagePath[counter] + ".jpg", grayMat);
+                processGrayMat(grayMat, counter, imagePath[counter]);
 
                 extra::cvtRGBMatToImage(grayMat, image);
                 texture.loadFromImage(image);
