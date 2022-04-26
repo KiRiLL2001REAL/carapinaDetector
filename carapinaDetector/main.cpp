@@ -18,30 +18,59 @@ void doClucterization(map<int, map<int, pair<int, int>>>& points, int windowSize
 
     for (auto& xIt : points) {
         for (auto& yIt : xIt.second) {
-            // while
-            vector<map<int, pair<int, int>>> interval;
+            pair<int, int> center;
+
+            // while центр не смещается
+
+            vector<pair<int, int>> rectZone;
 
             // получаем точки, лежащие в определённом диапазоне
             int leftBorder = xIt.first - windowSizeRadius;  //xIt.first - значение при инициализации (до while)
             int rightBorder = xIt.first + windowSizeRadius;
-            for (auto xrit = points.rbegin(); xrit != points.rend() && xrit->first >= leftBorder; ++xrit) {
-                interval.push_back(xIt.second);
-            }
-            for (auto xrit = points.begin(); xrit != points.end() && xrit->first <= rightBorder; ++xrit) {
-                interval.push_back(xIt.second);
-            }
-
-            vector<pair<int, int>> rectZone;
             int upperBorder = yIt.first - windowSizeRadius;  //yIt.first - значение при инициализации (до while)
             int bottomBorder = yIt.first + windowSizeRadius;
-            for (size_t i = 0; i < interval.size(); i++) {
-                for (auto yrit = interval[i].rbegin(); yrit != interval[i].rend() && yrit->first >= leftBorder; ++yrit) {
-                    rectZone.push_back(yrit->second);
+
+            auto _xrit = map<int, map<int, pair<int, int>>>::reverse_iterator(points.find(xIt.first));
+            for (; _xrit != points.rend() && _xrit->first >= leftBorder; ++_xrit) { // === влево
+                auto& interv = _xrit->second;
+                auto _yrit = map<int, pair<int, int>>::reverse_iterator(interv.find(xIt.first));
+                for (; _yrit != interv.rend() && _yrit->first >= upperBorder; ++_yrit) { // вверх
+                    rectZone.push_back(_yrit->second);
                 }
-                for (auto yrit = interval[i].begin(); yrit != interval[i].end() && yrit->first <= rightBorder; ++yrit) {
-                    rectZone.push_back(yrit->second);
+                auto _yit = interv.find(xIt.first);
+                if (_yit != interv.end())
+                    ++_yit;
+                for (; _yit != interv.end() && _yit->first <= bottomBorder; ++_yrit) { // вниз
+                    rectZone.push_back(_yit->second);
                 }
             }
+            auto _xit = points.find(xIt.first);
+            if (_xit != points.end())
+                ++_xit;
+            for (; _xit != points.end() && _xit->first <= rightBorder; ++_xit) { // === вправо
+                auto& interv = _xit->second;
+                auto _yrit = map<int, pair<int, int>>::reverse_iterator(interv.find(xIt.first));
+                for (; _yrit != interv.rend() && _yrit->first >= upperBorder; ++_yrit) { // вверх
+                    rectZone.push_back(_yrit->second);
+                }
+                auto _yit = interv.find(xIt.first);
+                if (_yit != interv.end())
+                    ++_yit;
+                for (; _yit != interv.end() && _yit->first <= bottomBorder; ++_yrit) { // вниз
+                    rectZone.push_back(_yit->second);
+                }
+            }
+
+            double koeff = 1.0 / rectZone.size();
+            double cx = 0;
+            double cy = 0;
+            for (auto& it : rectZone) {
+                cx += (double)it.first * koeff;
+                cy += (double)it.second * koeff;
+            }
+            center.first = (int)cx;
+            center.second = (int)cy;
+
             cv::Mat a;
             a.release();
         }
@@ -95,7 +124,6 @@ void processGrayMat(cv::Mat& mat, const std::string& path, CNN_Controller& cnnc)
             crops.emplace_back(xIt.first, yIt.first, 64, 64);
         }
     }
-
     int stored = 0;
     int border = cnnc.getMaxThreads() * 64;
     vector<cnn::Tensor> input;
@@ -130,7 +158,7 @@ void processGrayMat(cv::Mat& mat, const std::string& path, CNN_Controller& cnnc)
     }
 
     // === кластеризация
-    //doClucterization(clusterCenter, 16);
+    doClucterization(clusterCenter, 16);
 
     ///*
     //vector<vector<cv::Point>> contours;
