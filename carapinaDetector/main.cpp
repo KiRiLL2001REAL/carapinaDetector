@@ -99,6 +99,7 @@ void processGrayMat(cv::Mat& mat, const std::string& path, CNN_Controller& cnnc)
     int stored = 0;
     int border = cnnc.getMaxThreads() * 64;
     vector<cnn::Tensor> input;
+    // обработатываем crops.size()/border точек
     for (size_t i = 0; i < crops.size(); i++) {
         input.emplace_back(CNN_Controller::matToTensor(mat(crops[i])));
         stored++;
@@ -115,6 +116,7 @@ void processGrayMat(cv::Mat& mat, const std::string& path, CNN_Controller& cnnc)
             stored = 0;
         }
     }
+    // обработатываем оставшиеся crops.size()%border точек
     if (stored > 0) {
         auto result = cnnc.forward(input);
         input.clear();
