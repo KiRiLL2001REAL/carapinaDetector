@@ -12,7 +12,7 @@
 
 using namespace std;
 
-const std::string DATASET_PATH = "D:\\Dataset";
+const std::string DATASET_PATH = "D:\\data";
 
 void doClucterization(map<int, map<int, pair<int, int>>>& points, int windowSizeRadius = 16) {
 
@@ -78,107 +78,183 @@ void doClucterization(map<int, map<int, pair<int, int>>>& points, int windowSize
 
 }
 
-void processGrayMat(cv::Mat& mat, const std::string& path, CNN_Controller& cnnc) {
+void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controller& cnnc*/) {
     using namespace cv;
     using namespace std;
     sf::Clock timer;
     timer.restart();
 
-    // === размываем изображение
     Mat blured;
-    int gSize = 15;
-    GaussianBlur(mat, blured, { gSize, gSize }, double(gSize) / 2);
-    Mat gradX, gradY, absGradX, absGradY, grad;
+    int bSize = 7;
+    blur(mat, blured, Size(bSize, bSize));
+    Canny(blured, blured, 20, 50, 3);
 
-    // === проходим фильтром собеля по X и по Y; полученные матрицы совмещаем
-    int sobelKSize = 3;
-    double scale = 1.0;
-    double delta = 0.0;
-    int borderType = BORDER_DEFAULT;
-    // выходная матрица имеет размерность 16
-    Sobel(blured, gradX, CV_16S, 1, 0, sobelKSize, scale, delta, borderType);
-    Sobel(blured, gradY, CV_16S, 0, 1, sobelKSize, scale, delta, borderType);
-    // приводим их к размерности 8
-    convertScaleAbs(gradX, absGradX);
-    convertScaleAbs(gradY, absGradY);
+    string catalog = "D:\\data\\out\\" + to_string(c);
+    filesystem::create_directories(catalog);
 
-    addWeighted(absGradX, 0.5, absGradX, 0.5, 0, grad);
+    Mat rgb;
+    cvtColor(mat, rgb, COLOR_GRAY2RGB);
+    // Probabilistic Line Transform
+    vector<cv::Vec4i> linesP; // will hold the results of the detection
+    cv::HoughLinesP(blured, linesP, 2, CV_PI / 90, 30, 40, 15); // runs the actual detection
+    // Draw the lines
+    for (size_t i = 0; i < linesP.size(); i++)
+    {
+        cv::Vec4i l = linesP[i];
+        cv::line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+        int cx = (l[0] + l[2]) / 2;
+        int cy = (l[1] + l[3]) / 2;
+        int x0 = cx - 16;
+        int y0 = cy - 16;
+        int x1 = cx + 17;
+        int y1 = cy + 17;
+        if (x0 < 0 || y0 < 0 || x1 >= mat.size().width || y1 >= mat.size().height)
+            continue;
+        Rect2i crop = Rect2i(Point2i(x0, y0), Point2i(x1, y1));
+        imwrite(catalog + "\\" + to_string(i) + ".bmp", mat(crop));
+    }
+    imwrite("D:\\data\\out\\" + to_string(c) + ".jpg", rgb);
 
-    Canny(grad, grad, 20, 70, 3);
+    cvtColor(rgb, rgb, COLOR_RGB2BGR);
 
-    // левый верхний угол интересных областей
-    map<int, map<int, bool>> contours = {};
-    for (int i = 31; i < grad.rows - 32; i++)
-        for (int j = 31; j < grad.cols - 32; j++)
-            if (grad.at<uchar>(i, j) == 255) {
-                contours[j - 31][i - 31] = true;
-            }
-
+    mat.release();
+    blured.release();
+    mat = rgb;
     
-    map<int, map<int, pair<int, int>>> clusterCenter = {}; // на что среагировала сетка
 
-    // === ищем царапины сеткой
-    vector<Rect2i> crops;
-    for (auto& xIt : contours) {
-        for (auto& yIt : xIt.second) {
-            crops.emplace_back(xIt.first, yIt.first, 64, 64);
-        }
-    }
-    int stored = 0;
-    int border = cnnc.getMaxThreads() * 64;
-    vector<cnn::Tensor> input;
-    // обработатываем crops.size()/border точек
-    for (size_t i = 0; i < crops.size(); i++) {
-        input.emplace_back(CNN_Controller::matToTensor(mat(crops[i])));
-        stored++;
-        if (stored >= border) {
-            auto result = cnnc.forward(input);
-            input.clear();
-            for (size_t j = 0, ii = i + 1 - stored; j < result.size(); j++, ii++) {
-                Rect2i& crop = crops[ii];
-                if (result[j][0] <= 0.8)
-                    grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
-                else
-                    clusterCenter[crop.x][crop.y] = { crop.x, crop.y };
-            }
-            stored = 0;
-        }
-    }
-    // обработатываем оставшиеся crops.size()%border точек
-    if (stored > 0) {
-        auto result = cnnc.forward(input);
-        input.clear();
-        for (size_t j = 0, ii = crops.size() - stored; j < result.size(); j++, ii++) {
-            Rect2i& crop = crops[ii];
-            if (result[j][0] <= 0.8)
-                grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
-            else
-                clusterCenter[crop.x][crop.y] = { crop.x, crop.y };
-        }
-    }
-
-    // === кластеризация
-    doClucterization(clusterCenter, 16);
+    //// === размываем изображение
+    //Mat blured;
+    //int gSize = 15;
+    ////GaussianBlur(mat, blured, { gSize, gSize }, double(gSize) / 2);
+    //blur(mat, blured, Size(7, 7));
+    //Mat gradX, gradY, absGradX, absGradY, grad;
 
     ///*
-    //vector<vector<cv::Point>> contours;
-    //vector<cv::Vec4i> hierarchy;
-    //findContours(grad, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_TC89_KCOS);
-    //grad = Mat::zeros(grad.size(), CV_8U); // перерисовОчка
-    //for (size_t i = 0; i < contours.size(); i++) {
-    //    drawContours(grad, contours, (int)i, {255}, 1, cv::LINE_8, hierarchy, 0);
-    //}
+    //// === проходим фильтром собеля по X и по Y; полученные матрицы совмещаем
+    //int sobelKSize = 3;
+    //double scale = 1.0;
+    //double delta = 0.0;
+    //int borderType = BORDER_DEFAULT;
+    //// выходная матрица имеет размерность 16
+    //Sobel(blured, gradX, CV_16S, 1, 0, sobelKSize, scale, delta, borderType);
+    //Sobel(blured, gradY, CV_16S, 0, 1, sobelKSize, scale, delta, borderType);
+    //// приводим их к размерности 8
+    //convertScaleAbs(gradX, absGradX);
+    //convertScaleAbs(gradY, absGradY);
+
+    //addWeighted(absGradX, 0.5, absGradX, 0.5, 0, grad);
+
     //*/
 
+    //Canny(blured, blured, 30, 70, 3);
 
-    gradX.release();
-    gradY.release();
-    absGradX.release();
-    absGradY.release();
-    blured.release();
-    mat.release();
+    //// левый верхний угол интересных областей
+    //map<int, map<int, bool>> contours = {};
+    //for (int i = 31; i < grad.rows - 32; i++)
+    //    for (int j = 31; j < grad.cols - 32; j++)
+    //        if (grad.at<uchar>(i, j) == 255) {
+    //            contours[j - 31][i - 31] = true;
+    //        }
 
-    mat = grad;
+    //
+    //map<int, map<int, pair<int, int>>> clusterCenter = {}; // на что среагировала сетка
+
+    //// === ищем царапины сеткой
+    //vector<Rect2i> crops;
+    //for (auto& xIt : contours) {
+    //    for (auto& yIt : xIt.second) {
+    //        crops.emplace_back(xIt.first, yIt.first, 64, 64);
+    //    }
+    //}
+    ///*
+    //int save = 0;
+    //int imgcntr = 0;
+    //int stored = 0;
+    //int border = cnnc.getMaxThreads() * 64;
+    //vector<cnn::Tensor> input;
+    //// обработатываем crops.size()/border точек
+    //for (size_t i = 0; i < crops.size(); i++) {
+    //    input.emplace_back(CNN_Controller::matToTensor(mat(crops[i])));
+    //    stored++;
+    //    if (stored >= border) {
+    //        auto result = cnnc.forward(input);
+    //        input.clear();
+
+    //        for (size_t j = 0, ii = i + 1 - stored; j < result.size(); j++, ii++) {
+    //            Rect2i& crop = crops[ii];
+    //            if (save) {
+    //                imwrite("D:\\net\\" + std::to_string(imgcntr) + ".png", mat(crop));
+    //                imgcntr++;
+    //            }
+    //            save = 1 - save;
+    //            if (result[j][0] <= 0.8)
+    //                grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
+    //            else
+    //                clusterCenter[crop.x + 31][crop.y + 31] = { crop.x + 31, crop.y + 31 };
+    //        }
+    //        stored = 0;
+    //    }
+    //}
+    //// обработатываем оставшиеся crops.size()%border точек
+    //if (stored > 0) {
+    //    auto result = cnnc.forward(input);
+    //    input.clear();
+    //    for (size_t j = 0, ii = crops.size() - stored; j < result.size(); j++, ii++) {
+    //        Rect2i& crop = crops[ii];
+    //        if (save) {
+    //            imwrite("D:\\net\\" + std::to_string(imgcntr) + ".png", mat(crop));
+    //            imgcntr++;
+    //        }
+    //        save = 1 - save;
+    //        if (result[j][0] <= 0.8)
+    //            grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
+    //        else
+    //            clusterCenter[crop.x + 31][crop.y + 31] = { crop.x + 31, crop.y + 31 };
+    //    }
+    //}
+    //*/
+    //
+    //cnn::Tensor t;
+    //Rect2i crop(0, 0, 64, 64);
+    //for (auto& xIt : contours) {
+    //    crop.x = xIt.first;
+    //    for (auto& yIt : xIt.second) {
+    //        crop.y = yIt.first;
+    //        t = forward(matToTensor(mat(crop)));
+    //        if (t[0] <= 0.8)
+    //            grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
+    //        else
+    //            clusterCenter[crop.x + 31][crop.y + 31] = { crop.x + 31 , crop.y + 31 };
+    //    }
+    //}
+    //
+
+    //// Probabilistic Line Transform
+    //grayMat.release();
+    //grayMat = cv::Mat(filtered.rows, filtered.cols, CV_8UC1);
+    //cv::Mat mat;
+    //cv::cvtColor(grayMat, mat, cv::COLOR_GRAY2RGB);
+    //vector<cv::Vec4i> linesP; // will hold the results of the detection
+    //cv::HoughLinesP(filtered, linesP, 2, CV_PI / 90, 30, 50, 10); // runs the actual detection
+    //// Draw the lines
+    //for (size_t i = 0; i < linesP.size(); i++)
+    //{
+    //    cv::Vec4i l = linesP[i];
+    //    cv::line(mat, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 3, cv::LINE_AA);
+    //}
+
+    //// === кластеризация
+    ////doClucterization(clusterCenter, 16);
+
+
+    //gradX.release();
+    //gradY.release();
+    //absGradX.release();
+    //absGradY.release();
+    //blured.release();
+    //mat.release();
+
+    //mat = grad;
 
     cout << "Processed in " << timer.getElapsedTime().asMilliseconds() << "ms\n";
 }
@@ -202,11 +278,14 @@ int main()
     }
 
     // загрузка весов сетки
-    fstream f("weights182.json", ios::in);
+    fstream f("weights23.json", ios::in);
     nlohmann::json weights;
     f >> weights;
+    /*
     CNN_Controller controller;
     controller.initFromJson(weights);
+    */
+    loadFromJson(weights);
     f.close();
 
     sf::ContextSettings settings;
@@ -228,10 +307,10 @@ int main()
 
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
     cout << "Showed file \"" << imagePath[0] << "\"\n";
-    processGrayMat(grayMat, imagePath[0], controller);
+    processGrayMat(grayMat, 0, imagePath[0]/*, controller*/);
     //cv::imwrite(imagePath[0] + ".jpg", grayMat);
 
-    extra::cvtGrayMatToImage(grayMat, image);
+    extra::cvtRGBMatToImage(grayMat, image);
     texture.loadFromImage(image);
     sprite.setTexture(texture);
 
@@ -263,10 +342,10 @@ int main()
                 grayMat.release();
                 grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
                 cout << "Showed file \"" << imagePath[counter] << "\"\n";
-                processGrayMat(grayMat, imagePath[counter], controller);
+                processGrayMat(grayMat, counter, imagePath[counter]/*, controller */ );
                 //cv::imwrite(imagePath[counter] + ".jpg", grayMat);
 
-                extra::cvtGrayMatToImage(grayMat, image);
+                extra::cvtRGBMatToImage(grayMat, image);
                 texture.loadFromImage(image);
 
                 text.setString(imagePath[counter]);
