@@ -4,79 +4,12 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <fstream>
 
 #include "extra.hpp"
-#include "cnn.hpp"
-#include "cnn_config.hpp"
 
 using namespace std;
 
 const std::string DATASET_PATH = "D:\\data";
-
-void doClucterization(map<int, map<int, pair<int, int>>>& points, int windowSizeRadius = 16) {
-
-    for (auto& xIt : points) {
-        for (auto& yIt : xIt.second) {
-            pair<int, int> center;
-
-            // while центр не смещается
-
-            vector<pair<int, int>> rectZone;
-
-            // получаем точки, лежащие в определённом диапазоне
-            int leftBorder = xIt.first - windowSizeRadius;  //xIt.first - значение при инициализации (до while)
-            int rightBorder = xIt.first + windowSizeRadius;
-            int upperBorder = yIt.first - windowSizeRadius;  //yIt.first - значение при инициализации (до while)
-            int bottomBorder = yIt.first + windowSizeRadius;
-
-            auto _xrit = map<int, map<int, pair<int, int>>>::reverse_iterator(points.find(xIt.first));
-            for (; _xrit != points.rend() && _xrit->first >= leftBorder; ++_xrit) { // === влево
-                auto& interv = _xrit->second;
-                auto _yrit = map<int, pair<int, int>>::reverse_iterator(interv.find(xIt.first));
-                for (; _yrit != interv.rend() && _yrit->first >= upperBorder; ++_yrit) { // вверх
-                    rectZone.push_back(_yrit->second);
-                }
-                auto _yit = interv.find(xIt.first);
-                if (_yit != interv.end())
-                    ++_yit;
-                for (; _yit != interv.end() && _yit->first <= bottomBorder; ++_yrit) { // вниз
-                    rectZone.push_back(_yit->second);
-                }
-            }
-            auto _xit = points.find(xIt.first);
-            if (_xit != points.end())
-                ++_xit;
-            for (; _xit != points.end() && _xit->first <= rightBorder; ++_xit) { // === вправо
-                auto& interv = _xit->second;
-                auto _yrit = map<int, pair<int, int>>::reverse_iterator(interv.find(xIt.first));
-                for (; _yrit != interv.rend() && _yrit->first >= upperBorder; ++_yrit) { // вверх
-                    rectZone.push_back(_yrit->second);
-                }
-                auto _yit = interv.find(xIt.first);
-                if (_yit != interv.end())
-                    ++_yit;
-                for (; _yit != interv.end() && _yit->first <= bottomBorder; ++_yrit) { // вниз
-                    rectZone.push_back(_yit->second);
-                }
-            }
-
-            double koeff = 1.0 / rectZone.size();
-            double cx = 0;
-            double cy = 0;
-            for (auto& it : rectZone) {
-                cx += (double)it.first * koeff;
-                cy += (double)it.second * koeff;
-            }
-            center.first = (int)cx;
-            center.second = (int)cy;
-
-            cv::Mat a;
-            a.release();
-        }
-    }
-
-}
 
 void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controller& cnnc*/) {
     using namespace cv;
@@ -120,141 +53,6 @@ void processGrayMat(cv::Mat& mat, int c, const std::string& path/*, CNN_Controll
     mat.release();
     blured.release();
     mat = rgb;
-    
-
-    //// === размываем изображение
-    //Mat blured;
-    //int gSize = 15;
-    ////GaussianBlur(mat, blured, { gSize, gSize }, double(gSize) / 2);
-    //blur(mat, blured, Size(7, 7));
-    //Mat gradX, gradY, absGradX, absGradY, grad;
-
-    ///*
-    //// === проходим фильтром собеля по X и по Y; полученные матрицы совмещаем
-    //int sobelKSize = 3;
-    //double scale = 1.0;
-    //double delta = 0.0;
-    //int borderType = BORDER_DEFAULT;
-    //// выходная матрица имеет размерность 16
-    //Sobel(blured, gradX, CV_16S, 1, 0, sobelKSize, scale, delta, borderType);
-    //Sobel(blured, gradY, CV_16S, 0, 1, sobelKSize, scale, delta, borderType);
-    //// приводим их к размерности 8
-    //convertScaleAbs(gradX, absGradX);
-    //convertScaleAbs(gradY, absGradY);
-
-    //addWeighted(absGradX, 0.5, absGradX, 0.5, 0, grad);
-
-    //*/
-
-    //Canny(blured, blured, 30, 70, 3);
-
-    //// левый верхний угол интересных областей
-    //map<int, map<int, bool>> contours = {};
-    //for (int i = 31; i < grad.rows - 32; i++)
-    //    for (int j = 31; j < grad.cols - 32; j++)
-    //        if (grad.at<uchar>(i, j) == 255) {
-    //            contours[j - 31][i - 31] = true;
-    //        }
-
-    //
-    //map<int, map<int, pair<int, int>>> clusterCenter = {}; // на что среагировала сетка
-
-    //// === ищем царапины сеткой
-    //vector<Rect2i> crops;
-    //for (auto& xIt : contours) {
-    //    for (auto& yIt : xIt.second) {
-    //        crops.emplace_back(xIt.first, yIt.first, 64, 64);
-    //    }
-    //}
-    ///*
-    //int save = 0;
-    //int imgcntr = 0;
-    //int stored = 0;
-    //int border = cnnc.getMaxThreads() * 64;
-    //vector<cnn::Tensor> input;
-    //// обработатываем crops.size()/border точек
-    //for (size_t i = 0; i < crops.size(); i++) {
-    //    input.emplace_back(CNN_Controller::matToTensor(mat(crops[i])));
-    //    stored++;
-    //    if (stored >= border) {
-    //        auto result = cnnc.forward(input);
-    //        input.clear();
-
-    //        for (size_t j = 0, ii = i + 1 - stored; j < result.size(); j++, ii++) {
-    //            Rect2i& crop = crops[ii];
-    //            if (save) {
-    //                imwrite("D:\\net\\" + std::to_string(imgcntr) + ".png", mat(crop));
-    //                imgcntr++;
-    //            }
-    //            save = 1 - save;
-    //            if (result[j][0] <= 0.8)
-    //                grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
-    //            else
-    //                clusterCenter[crop.x + 31][crop.y + 31] = { crop.x + 31, crop.y + 31 };
-    //        }
-    //        stored = 0;
-    //    }
-    //}
-    //// обработатываем оставшиеся crops.size()%border точек
-    //if (stored > 0) {
-    //    auto result = cnnc.forward(input);
-    //    input.clear();
-    //    for (size_t j = 0, ii = crops.size() - stored; j < result.size(); j++, ii++) {
-    //        Rect2i& crop = crops[ii];
-    //        if (save) {
-    //            imwrite("D:\\net\\" + std::to_string(imgcntr) + ".png", mat(crop));
-    //            imgcntr++;
-    //        }
-    //        save = 1 - save;
-    //        if (result[j][0] <= 0.8)
-    //            grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
-    //        else
-    //            clusterCenter[crop.x + 31][crop.y + 31] = { crop.x + 31, crop.y + 31 };
-    //    }
-    //}
-    //*/
-    //
-    //cnn::Tensor t;
-    //Rect2i crop(0, 0, 64, 64);
-    //for (auto& xIt : contours) {
-    //    crop.x = xIt.first;
-    //    for (auto& yIt : xIt.second) {
-    //        crop.y = yIt.first;
-    //        t = forward(matToTensor(mat(crop)));
-    //        if (t[0] <= 0.8)
-    //            grad.at<uchar>(crop.y + 31, crop.x + 31) = 0;
-    //        else
-    //            clusterCenter[crop.x + 31][crop.y + 31] = { crop.x + 31 , crop.y + 31 };
-    //    }
-    //}
-    //
-
-    //// Probabilistic Line Transform
-    //grayMat.release();
-    //grayMat = cv::Mat(filtered.rows, filtered.cols, CV_8UC1);
-    //cv::Mat mat;
-    //cv::cvtColor(grayMat, mat, cv::COLOR_GRAY2RGB);
-    //vector<cv::Vec4i> linesP; // will hold the results of the detection
-    //cv::HoughLinesP(filtered, linesP, 2, CV_PI / 90, 30, 50, 10); // runs the actual detection
-    //// Draw the lines
-    //for (size_t i = 0; i < linesP.size(); i++)
-    //{
-    //    cv::Vec4i l = linesP[i];
-    //    cv::line(mat, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 3, cv::LINE_AA);
-    //}
-
-    //// === кластеризация
-    ////doClucterization(clusterCenter, 16);
-
-
-    //gradX.release();
-    //gradY.release();
-    //absGradX.release();
-    //absGradY.release();
-    //blured.release();
-    //mat.release();
-
-    //mat = grad;
 
     cout << "Processed in " << timer.getElapsedTime().asMilliseconds() << "ms\n";
 }
@@ -276,17 +74,6 @@ int main()
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
         return 0;
     }
-
-    // загрузка весов сетки
-    fstream f("weights23.json", ios::in);
-    nlohmann::json weights;
-    f >> weights;
-    /*
-    CNN_Controller controller;
-    controller.initFromJson(weights);
-    */
-    loadFromJson(weights);
-    f.close();
 
     sf::ContextSettings settings;
     settings.antialiasingLevel = 16;
