@@ -6,9 +6,10 @@
 
 #include "extra.hpp"
 
-const std::string DATASET_PATH = "D:\\Dataset";
+const std::string DATASET_PATH = "C:\\Dataset";
 
-
+void handleMatrix(const cv::Mat& src, cv::Mat& dst, cv::Mat& rescaled);
+cv::Mat laplasiaze(const cv::Mat& src);
 
 int main()
 {
@@ -17,36 +18,19 @@ int main()
     const int WIN_WIDTH = 1200;
     const int WIN_HEIGHT = 700;
 
-    const int LOW_TRESHOLD = 20;
-    const int HIGH_TRESHOLD = 70;
-
     vector<string> imagePath = {};
 
-    extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
-    //for (auto& it : imagePath)
-    //    cout << it << '\n';
+    extra::loadFilenames(DATASET_PATH, ".jpg", imagePath);
 
     if (imagePath.empty()) {
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
         return 0;
     }
 
-    cv::Mat filtered;
-    cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
-    //cv::blur(grayMat, grayMat, cv::Size(5, 5));
-    cv::blur(grayMat, filtered, cv::Size(7, 7));
-    //cv::GaussianBlur(grayMat, grayMat, cv::Size(3, 3), 5);
-
-    //cv::bilateralFilter(grayMat, filtered, 5, 11, 17);
-    cv::Canny(filtered, filtered, LOW_TRESHOLD, HIGH_TRESHOLD, 3);
-    cv::imwrite(imagePath[0] + ".jpg", filtered);
-
     sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Carapina detector", sf::Style::Close);
-    sf::Clock timer;
-    sf::Image image1;
-    sf::Image image2;
-    sf::Texture texture1;
-    sf::Texture texture2;
+    //sf::Clock timer;
+    sf::Image image;
+    sf::Texture texture;
     sf::Sprite sprite;
     sf::Font font;
     font.loadFromFile("C:\\Windows\\Fonts\\courbd.ttf");
@@ -58,27 +42,30 @@ int main()
     text.setOutlineColor(sf::Color::Black);
     text.setCharacterSize(28);
 
+    cv::namedWindow("rescaledMat");
+
+    cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
+    cv::Mat smallMat;
+    cv::Mat rescaled;
+    //handleMatrix(grayMat, smallMat, rescaled);
+    //cv::imshow("rescaledMat", rescaled);
+
     cv::Mat tmpMat;
     cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
-    image1.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
+    image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
     tmpMat.release();
-    cv::cvtColor(filtered, tmpMat, cv::COLOR_GRAY2RGBA);
-    image2.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
-    tmpMat.release();
-    texture1.loadFromImage(image1);
-    texture2.loadFromImage(image2);
-    sprite.setTexture(texture1);
+    texture.loadFromImage(image);
+    sprite.setTexture(texture);
 
-    //float scale = float(WIN_HEIGHT) / sprite.getLocalBounds().height;
-    //sprite.setScale({ scale, scale });
-
-    float scale = (float(WIN_WIDTH) / sprite.getLocalBounds().width) / 2;
+    float scale = float(WIN_WIDTH) / sprite.getLocalBounds().width;
     sprite.setScale({ scale, scale });
 
-    int counter = 1;
+    int counter = 0;
     const int imgDelayMillis = 0;
 
-    timer.restart();
+    bool finished = false;
+    bool needUpdate = true;
+    //timer.restart();
     while (window.isOpen())
     {
         sf::Event e;
@@ -89,95 +76,62 @@ int main()
                 window.close();
                 break;
             case sf::Event::KeyPressed:
-                if (e.key.code == sf::Keyboard::Escape)
+                switch (e.key.code) {
+                case sf::Keyboard::Escape:
                     window.close();
-                break;
-            }
-        }
-
-        if (timer.getElapsedTime().asMilliseconds() >= imgDelayMillis) {
-            if (counter < imagePath.size()) {
-                grayMat.release();
-                grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
-                filtered.release();
-                //cv::blur(grayMat, grayMat, cv::Size(5, 5));
-                cv::blur(grayMat, filtered, cv::Size(7, 7));
-                //cv::GaussianBlur(grayMat, grayMat, cv::Size(3, 3), 5);
-                //cv::bilateralFilter(grayMat, filtered, 5, 11, 17);
-                cv::Canny(filtered, filtered, LOW_TRESHOLD, HIGH_TRESHOLD, 3);
-                cv::imwrite(imagePath[counter] + ".jpg", filtered);
-
-                cv::RNG rng(12345);
-                vector<vector<cv::Point> > contours;
-                vector<cv::Vec4i> hierarchy;
-                findContours(filtered, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_TC89_KCOS);
-                cv::Mat drawing = cv::Mat::zeros(filtered.size(), CV_8UC3);
-                for (size_t i = 0; i < contours.size(); i++)
-                {
-                    cv::Scalar color = cv::Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
-                    drawContours(drawing, contours, (int)i, color, 2, cv::LINE_8, hierarchy, 0);
+                    break;
+                case sf::Keyboard::Right:
+                    needUpdate = true;
+                    counter++;
+                    if (counter >= imagePath.size())
+                        counter = 0;
+                    break;
+                case sf::Keyboard::Left:
+                    needUpdate = true;
+                    counter--;
+                    if (counter < 0)
+                        counter = imagePath.size() - 1;
+                    break;
                 }
-                cv::imwrite(imagePath[counter] + "1.jpg", drawing);
-                drawing.release();
-
-                //vector<cv::Vec2f> lines; // will hold the results of the detection
-                //cv::HoughLines(filtered, lines, 0.5, CV_PI / 360, 150, 0, 0); // runs the actual detection
-                //// Draw the lines
-                //for (size_t i = 0; i < lines.size(); i++)
-                //{
-                //    float rho = lines[i][0], theta = lines[i][1];
-                //    cv::Point pt1, pt2;
-                //    double a = cos(theta), b = sin(theta);
-                //    double x0 = a * rho, y0 = b * rho;
-                //    pt1.x = cvRound(x0 + filtered.cols * (-b));
-                //    pt1.y = cvRound(y0 + filtered.rows * (a));
-                //    pt2.x = cvRound(x0 - filtered.cols * (-b));
-                //    pt2.y = cvRound(y0 - filtered.rows * (a));
-                //    line(grayMat, pt1, pt2, cv::Scalar(255), 1, cv::LINE_AA);
-                //}
-
-                // Probabilistic Line Transform
-                //grayMat.release();
-                //grayMat = cv::Mat(filtered.rows, filtered.cols, CV_8UC1);
-                //cv::Mat mat;
-                //cv::cvtColor(grayMat, mat, cv::COLOR_GRAY2RGB);
-                //vector<cv::Vec4i> linesP; // will hold the results of the detection
-                //cv::HoughLinesP(filtered, linesP, 2, CV_PI / 90, 30, 50, 10); // runs the actual detection
-                //// Draw the lines
-                //for (size_t i = 0; i < linesP.size(); i++)
-                //{
-                //    cv::Vec4i l = linesP[i];
-                //    cv::line(mat, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 3, cv::LINE_AA);
-                //}
-
-                //cv::imwrite(imagePath[counter] + "1.jpg", mat);
-                //mat.release();
-                //cv::imwrite(imagePath[counter] + "1.jpg", grayMat);
-
-                cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
-                image1.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
-                tmpMat.release();
-                cv::cvtColor(filtered, tmpMat, cv::COLOR_GRAY2RGBA);
-                image2.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
-                tmpMat.release();
-                texture1.loadFromImage(image1);
-                texture2.loadFromImage(image2);
-
-                text.setString(imagePath[counter]);
-                cout << "Showed file \"" << imagePath[counter] << "\"\n";
-
-                counter++;
             }
-            timer.restart();
         }
+
+//        if (timer.getElapsedTime().asMilliseconds() >= imgDelayMillis) {
+//            if (counter < imagePath.size()) {
+        if (needUpdate) {
+            needUpdate = false;
+
+            grayMat.release();
+            grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
+            smallMat.release();
+            rescaled.release();
+            handleMatrix(grayMat, smallMat, rescaled);
+            cv::imshow("rescaledMat", rescaled);
+
+            cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
+            image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
+            tmpMat.release();
+            texture.loadFromImage(image);
+
+            text.setString(imagePath[counter]);
+            cout << "Showed file \"" << imagePath[counter] << "\"\n";
+        }
+                //counter++;
+//            }
+//            else {
+//                if (!finished) {
+//                    text.setString("finished");
+//                    cout << "Finished.\n";
+//                }
+//                finished = true;
+//            }
+//
+//            timer.restart();
+//        }
 
         window.clear();
 
-        sprite.setTexture(texture1);
-        sprite.setPosition({ 0.f, 0.f });
-        window.draw(sprite);
-        sprite.setTexture(texture2);
-        sprite.setPosition({ float(WIN_WIDTH) / 2, 0.f });
+        sprite.setTexture(texture);
         window.draw(sprite);
 
         window.draw(text);
@@ -186,5 +140,83 @@ int main()
         this_thread::sleep_for(chrono::milliseconds(1));
     }
 
+    cv::destroyAllWindows();
+
     return 0;
+}
+
+
+
+void handleMatrix(const cv::Mat& src, cv::Mat& dst, cv::Mat& rescaled) {
+    using namespace cv;
+    using namespace std;
+    
+    if (!dst.empty())
+        dst.release();
+    if (!rescaled.empty())
+        rescaled.release();
+
+    Mat smallMat;
+    //resize(laplasiaze(src), smallMat, Size(), 0.04, 0.04, INTER_LINEAR);
+    GaussianBlur(src, smallMat, Size(51, 51), 0, 0, BORDER_DEFAULT);
+    namedWindow("gauss blur 15", WINDOW_NORMAL);
+    imshow("gauss blur 15", smallMat);
+    //resize(src, smallMat, Size(), 0.04, 0.04, INTER_LINEAR);
+    resize(smallMat, smallMat, Size(), 0.04, 0.04, INTER_LINEAR);
+    
+    Mat cannyed;
+    int cApertureSize = 3;
+    double cThres1 = 20;
+    double cThres2 = 40;
+    Canny(smallMat, cannyed, cThres1, cThres2, cApertureSize);
+
+    Mat rgb;
+    cvtColor(cannyed, rgb, COLOR_GRAY2RGB);
+
+    vector<cv::Vec4i> linesP; // will hold the results of the detection
+    cv::HoughLinesP(cannyed, linesP, 2, CV_PI / 90, 30, 40, 15); // runs the actual detection
+    for (size_t i = 0; i < linesP.size(); i++)
+    {
+        cv::Vec4i l = linesP[i];
+        cv::line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 1, cv::LINE_AA);
+    }
+
+    resize(rgb, rescaled, Size(512, 512), 0, 0, INTER_LINEAR);
+    cannyed.release();
+    rgb.release();
+    dst = smallMat;
+}
+
+cv::Mat laplasiaze(const cv::Mat& src) {
+    using namespace cv;
+
+    Mat kernel = (Mat_<float>(3, 3) <<
+        1, 1, 1,
+        1, -8, 1,
+        1, 1, 1);
+
+    //Mat imgLaplacian;
+    //filter2D(src, imgLaplacian, CV_32F, kernel);
+    //Mat sharp;
+    //src.convertTo(sharp, CV_32F);
+    //Mat imgResult = sharp - imgLaplacian;
+    //// convert back to 8bits gray scale 
+    //imgResult.convertTo(imgResult, CV_8UC3);
+    //imgLaplacian.convertTo(imgLaplacian, CV_8UC3);
+    //// imshow( "Laplace Filtered Image", imgLaplacian ); 
+    //namedWindow("New Sharped Image", WINDOW_NORMAL); // Create a window to display results 
+    //imshow("New Sharped Image", imgResult);
+
+    // Create binary image from source image 
+    Mat bw = src.clone();
+    //Mat bw = imgResult;
+    threshold(bw, bw, 40, 255, THRESH_BINARY);// | THRESH_OTSU);
+    //adaptiveThreshold(bw, bw, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 5, 0); 
+
+    medianBlur(bw, bw, 15);
+
+    namedWindow("Binary Image", WINDOW_NORMAL); // Create a window to display results 
+    imshow("Binary Image", bw);
+
+    return bw;
 }

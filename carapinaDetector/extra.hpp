@@ -18,7 +18,7 @@ void extra::loadFilenames(const string& folder, const string& extension, vector<
 		return;
 	for (auto& it : filesystem::directory_iterator(folder)) {
 		if (it.is_directory()) {
-			loadFilenames(it.path().string(), extension, out);
+			//loadFilenames(it.path().string(), extension, out);
 			continue;
 		}
 		auto path = it.path();
