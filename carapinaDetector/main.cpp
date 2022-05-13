@@ -6,6 +6,90 @@
 
 #include "extra.hpp"
 
+struct TLine {
+    double angle;
+    cv::Point2d vec;
+    cv::Point2d pos[2];
+    cv::Point2d straight[2];
+
+    //undefined line
+    TLine() {}
+
+    TLine(cv::Point2d p0, cv::Point2d p1, int maxX, int maxY) {
+        pos[0] = p0;
+        pos[1] = p1;
+        
+        vec = p1 - p0;
+        double lenNormCoeff = 1.0 / sqrt(vec.x * vec.x + vec.y * vec.y);
+        vec.x *= lenNormCoeff;
+        vec.y *= lenNormCoeff;
+                
+        angle = atan2(vec.y, vec.x);
+
+        double sy0 = ((0.0 - p0.x) * vec.y) / vec.x + p0.y;           // Y при X = 0
+        double sy1 = ((double(maxX) - p0.x) * vec.y) / vec.x + p0.y;  // Y при X = maxX
+        double sx0 = ((0.0 - p0.y) * vec.x) / vec.y + p0.x;           // X при Y = 0
+        double sx1 = ((double(maxY) - p0.y) * vec.x) / vec.y + p0.x;  // X при Y = maxY
+
+        std::vector<double> v;
+        // при X = 0, Y не выходит за пределы изображения
+        if (sy0 <= maxY && sy0 >= 0) { v.push_back(0);    v.push_back(sy0); }
+        // при X = maxX, Y не выходит за пределы изображения
+        if (sy1 <= maxY && sy1 >= 0) { v.push_back(maxX); v.push_back(sy1); }
+        // при Y = 0, X не выходит за пределы изображения
+        if (sx0 <= maxX && sx0 >= 0) { v.push_back(sx0); v.push_back(0);    }
+        // при Y = maxY, X не выходит за пределы изображения
+        if (sx1 <= maxX && sx1 >= 0) { v.push_back(sx1); v.push_back(maxY); }
+
+        straight[0].x = v[0];
+        straight[0].y = v[1];
+        straight[1].x = v[2];
+        straight[1].y = v[3];
+    }
+
+    double dist(const TLine& right) {
+        using namespace cv;
+        /*
+        Point2d c0 = straight[1] + straight[0];
+        c0 /= 2;
+        c0.x = abs(c0.x);
+        c0.y = abs(c0.y);
+        Point2d c1 = right.straight[1] + right.straight[0];
+        c1 /= 2;
+        c1.x = abs(c1.x);
+        c1.y = abs(c1.y);
+        */
+
+        //Point2d perpV = vec;
+        //std::swap(perpV.x, perpV.y);
+        //perpV.y *= -1;
+
+        Point2d c = straight[0] + straight[1];
+        c /= 2;
+
+        double x1;
+        double y1;
+
+        if (vec.x >= 0.5) {
+            y1 = c.y + 1;
+            x1 = ((0.0 - c.y) * vec.x) / vec.y + c.x;
+        } else {
+            x1 = c.x + 1;
+            y1 = ((0.0 - c.x) * vec.y) / vec.x + c.y;
+        }
+
+        TLine perpL = TLine(c, Point2d(x1, y1), 99999, 99999);
+
+        cv::Point2d cpoint;
+        extra::cross(cpoint, right.straight[0], right.straight[1], perpL.straight[0], perpL.straight[1]);
+
+        double dx = c.x - cpoint.x;
+        double dy = c.y - cpoint.y;
+
+        return sqrt(dx * dx + dy * dy);
+    }
+};
+
 const std::string DATASET_PATH = "C:\\Dataset";
 
 void handleMatrix(const cv::Mat& src, cv::Mat& dst, cv::Mat& rescaled);
@@ -13,6 +97,14 @@ cv::Mat laplasiaze(const cv::Mat& src);
 
 int main()
 {
+    using namespace cv;
+    TLine l1 = TLine(Point2d(0, 2), Point2d(2, 0), 6, 4);
+    TLine l2 = TLine(Point2d(2, 4), Point2d(6, 0), 6, 4);
+    std::cout << l1.dist(l2);
+
+
+    return 0;
+
     using namespace std;
 
     const int WIN_WIDTH = 1200;
@@ -170,16 +262,39 @@ void handleMatrix(const cv::Mat& src, cv::Mat& dst, cv::Mat& rescaled) {
     double cThres2 = 40;
     Canny(smallMat, cannyed, cThres1, cThres2, cApertureSize);
 
+    Mat morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
+    dilate(cannyed, cannyed, morphKernel);
+    erode(cannyed, cannyed, morphKernel);
+
     Mat rgb;
     cvtColor(cannyed, rgb, COLOR_GRAY2RGB);
 
-    vector<cv::Vec4i> linesP; // will hold the results of the detection
-    cv::HoughLinesP(cannyed, linesP, 2, CV_PI / 90, 30, 40, 15); // runs the actual detection
+    vector<Vec4i> linesP; // will hold the results of the detection
+    double rho = 0.5;
+    double theta = CV_PI / (180 / rho);
+    HoughLinesP(cannyed, linesP, rho, theta, 20, 30, 5); // runs the actual detection
+
+    TLine* myLines = new TLine[linesP.size()];
     for (size_t i = 0; i < linesP.size(); i++)
     {
-        cv::Vec4i l = linesP[i];
-        cv::line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 1, cv::LINE_AA);
+        Vec4i l = linesP[i];
+        line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 1, cv::LINE_AA);
+        myLines[i] = TLine( Point2d(l[0], l[1]), Point2d(l[2], l[3]), cannyed.cols, cannyed.rows );
     }
+
+    qsort(
+        myLines,
+        linesP.size(),
+        sizeof(TLine),
+        [](const void* a, const void* b) {
+            const TLine* l1 = static_cast<const TLine*>(a);
+            const TLine* l2 = static_cast<const TLine*>(b);
+            if (l1->angle < l2->angle) return -1;
+            if (l1->angle > l2->angle) return 1;
+            return 0;
+        });
+
+
 
     resize(rgb, rescaled, Size(512, 512), 0, 0, INTER_LINEAR);
     cannyed.release();
