@@ -1,4 +1,4 @@
-﻿#include <iostream>
+#include <iostream>
 #include <opencv2/opencv.hpp>
 #include <SFML/Graphics.hpp>
 #include <string>
@@ -29,7 +29,7 @@ int getRep(int* rep_arr, int x) {
 void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int start_j, int ni, int nj);
 
 int main()
-{
+{    
     using namespace std;
 
     const int WIN_WIDTH = 1200;
@@ -114,8 +114,8 @@ int main()
             grayMat.release();
             grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
             mask.release();
-            handleMatrix(grayMat, mask, imagePath[counter]);
-
+            handleMatrix(grayMat, mask);
+            
             cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
             for (int i = 0; i < grayMat.rows; i++)
                 for (int j = 0; j < grayMat.cols; j++) {
@@ -151,7 +151,7 @@ int main()
 void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
     using namespace cv;
     using namespace std;
-
+    
     if (!dst.empty())
         dst.release();
 
@@ -173,29 +173,8 @@ void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
     Canny(dilated, cannyed, 10, 255, 3);
     dilated.release();
 
-    Mat dk3 = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-    dilate(cannyed, cannyed, dk3);
-    dilate(cannyed, cannyed, dk3);
-    erode(cannyed, cannyed, dk3);
-
-    vector<vector<Point> > contours;
-    vector<Vec4i> hierarchy;
-    findContours(cannyed, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
-    Mat drawing = Mat::zeros(cannyed.size(), CV_8UC3);
-    RNG rng(12345);
-    for (size_t i = 0; i < contours.size(); i++)
-    {
-        Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
-        drawContours(drawing, contours, (int)i, color, 1, LINE_8, hierarchy, 0);
-    }
-
-    
-
     std::string p = path;
-    p.insert(3, "out\\");
     
-    imwrite(p + ".bmp", drawing);
-    drawing.release();
 
     dst = cannyed;
 }

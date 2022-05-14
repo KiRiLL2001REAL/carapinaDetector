@@ -1,4 +1,4 @@
-﻿#include <iostream>
+#include <iostream>
 #include <opencv2/opencv.hpp>
 #include <SFML/Graphics.hpp>
 #include <string>
@@ -7,7 +7,8 @@
 #include "extra.hpp"
 
 
-const std::string DATASET_PATH = "C:\\Dataset";
+//const std::string DATASET_PATH = "C:\\Dataset";
+const std::string DATASET_PATH = "C:\\hack";
 
 void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path);
 
@@ -38,6 +39,7 @@ int main()
     vector<string> imagePath = {};
 
     extra::loadFilenames(DATASET_PATH, ".jpg", imagePath);
+    extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
 
     if (imagePath.empty()) {
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
@@ -155,10 +157,36 @@ void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
     if (!dst.empty())
         dst.release();
 
+    Mat blured;
+    int bSize = 3;
+    GaussianBlur(src, blured, Size(bSize, bSize), 0);
+    Canny(blured, blured, 20, 50, 3);
+
+    Mat rgb;
+    cvtColor(src, rgb, COLOR_GRAY2RGBA);
+
+    for (int i = 0; i < blured.rows; i++)
+        for (int j = 0; j < blured.cols; j++) {
+            if (blured.at<uchar>(i, j) != 0) {
+                rgb.at<Vec4b>(i, j)[2] = 255;
+                rgb.at<Vec4b>(i, j)[3] = 255;
+            }
+        }
+
+    if (!imwrite(path + "canny.bmp", rgb))
+        cout << "Can't save '" << path << "canny.bmp'\n";
+
     Mat mask;
     uchar backg1;
     uchar backg2;
+
+    mask = Mat::zeros(src.rows, src.cols, CV_8U);
+
+    /*
     templatePictureMaker(src, mask, 0, 0, src.rows, src.cols);
+
+    namedWindow("mask", WINDOW_NORMAL);
+    imshow("mask", mask);
 
     Mat dilated;
     Mat dk11 = getStructuringElement(MORPH_ELLIPSE, Size(11, 11));
@@ -167,37 +195,11 @@ void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
     dilate(mask, dilated, dk11);
     erode(dilated, dilated, ek3);
     dilate(dilated, dilated, dk15);
+
     mask.release();
 
-    Mat cannyed;
-    Canny(dilated, cannyed, 10, 255, 3);
-    dilated.release();
-
-    Mat dk3 = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-    dilate(cannyed, cannyed, dk3);
-    dilate(cannyed, cannyed, dk3);
-    erode(cannyed, cannyed, dk3);
-
-    vector<vector<Point> > contours;
-    vector<Vec4i> hierarchy;
-    findContours(cannyed, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
-    Mat drawing = Mat::zeros(cannyed.size(), CV_8UC3);
-    RNG rng(12345);
-    for (size_t i = 0; i < contours.size(); i++)
-    {
-        Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
-        drawContours(drawing, contours, (int)i, color, 1, LINE_8, hierarchy, 0);
-    }
-
-    
-
-    std::string p = path;
-    p.insert(3, "out\\");
-    
-    imwrite(p + ".bmp", drawing);
-    drawing.release();
-
-    dst = cannyed;
+    dst = dilated;*/
+    dst = mask;
 }
 
 void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int start_j, int ni, int nj) {
