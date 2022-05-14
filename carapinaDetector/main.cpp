@@ -189,6 +189,18 @@ void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
         drawContours(drawing, contours, (int)i, color, 1, LINE_8, hierarchy, 0);
     }
 
+    size_t maxIndex = 0;
+    double maxArea = contourArea(contours[0]);
+    for (size_t i = 1; i < contours.size(); i++) {
+        double area = contourArea(contours[i]);
+        if (area > maxArea) {
+            maxArea = area;
+            maxIndex = i;
+        }
+    }
+
+    RotatedRect rrect = minAreaRect(contours[maxIndex]);
+
     
 
     std::string p = path;
