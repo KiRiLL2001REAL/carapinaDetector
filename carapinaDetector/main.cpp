@@ -4,34 +4,32 @@
 #include <string>
 #include <vector>
 
-#include "TLine.hpp"
 #include "extra.hpp"
 
 
 const std::string DATASET_PATH = "C:\\Dataset";
 
-void handleMatrix(const cv::Mat& src, cv::Mat& dst, cv::Mat& rescaled);
-cv::Mat laplasiaze(const cv::Mat& src);
+void handleMatrix(const cv::Mat& src, cv::Mat& dst);
+
+#define null_rep -1
+#define component_cnt_max 100
+#define delta_bound 2
+struct deltStruct {
+    int pix_num_start;
+    int pix_num_finish;
+    int delta;
+};
+int comparator(const void* x, const void* y) { return ((deltStruct*)x)->delta - ((deltStruct*)y)->delta; }
+int getRep(int* rep_arr, int x) {
+    if (rep_arr[x] == null_rep)
+        return x;
+    rep_arr[x] = getRep(rep_arr, rep_arr[x]);
+    return rep_arr[x];
+}
+void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int start_j, int ni, int nj);
 
 int main()
-{
-    /*
-    using namespace cv;
-    TLine::maxX = 6;
-    TLine::maxY = 4;
-
-    TLine l1 = TLine(Point2d(0, 0), Point2d(2, 2));
-    TLine l2 = TLine(Point2d(0, 1), Point2d(2, 3));
-
-    Point2d cpoint;
-    if (extra::cross(cpoint, l1.pos[0], l1.pos[1], l2.pos[0], l2.pos[1]))
-        std::cout << "intersection: " << cpoint << '\n';
-    else
-        std::cout << "distance: " << l1.dist(l2) << '\n';
-    
-    std::cin.get();
-    return 0;
-    */
+{    
     using namespace std;
 
     const int WIN_WIDTH = 1200;
@@ -47,7 +45,6 @@ int main()
     }
 
     sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Carapina detector", sf::Style::Close);
-    //sf::Clock timer;
     sf::Image image;
     sf::Texture texture;
     sf::Sprite sprite;
@@ -61,13 +58,10 @@ int main()
     text.setOutlineColor(sf::Color::Black);
     text.setCharacterSize(28);
 
-    cv::namedWindow("rescaledMat");
+    //cv::namedWindow("rescaledMat");
 
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
-    cv::Mat smallMat;
-    cv::Mat rescaled;
-    //handleMatrix(grayMat, smallMat, rescaled);
-    //cv::imshow("rescaledMat", rescaled);
+    cv::Mat mask;
 
     cv::Mat tmpMat;
     cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
@@ -84,7 +78,6 @@ int main()
 
     bool finished = false;
     bool needUpdate = true;
-    //timer.restart();
     while (window.isOpen())
     {
         sf::Event e;
@@ -115,19 +108,22 @@ int main()
             }
         }
 
-//        if (timer.getElapsedTime().asMilliseconds() >= imgDelayMillis) {
-//            if (counter < imagePath.size()) {
         if (needUpdate) {
             needUpdate = false;
 
             grayMat.release();
             grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
-            smallMat.release();
-            rescaled.release();
-            handleMatrix(grayMat, smallMat, rescaled);
-            cv::imshow("rescaledMat", rescaled);
-
+            mask.release();
+            handleMatrix(grayMat, mask);
+            
             cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
+            for (int i = 0; i < grayMat.rows; i++)
+                for (int j = 0; j < grayMat.cols; j++) {
+                    if (mask.at<uchar>(i, j) == 255) {
+                        tmpMat.at<cv::Vec4b>(i, j)[0] = 255;
+                        tmpMat.at<cv::Vec4b>(i, j)[3] = 255;
+                    }
+                }
             image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
             tmpMat.release();
             texture.loadFromImage(image);
@@ -135,18 +131,6 @@ int main()
             text.setString(imagePath[counter]);
             cout << "Showed file \"" << imagePath[counter] << "\"\n";
         }
-                //counter++;
-//            }
-//            else {
-//                if (!finished) {
-//                    text.setString("finished");
-//                    cout << "Finished.\n";
-//                }
-//                finished = true;
-//            }
-//
-//            timer.restart();
-//        }
 
         window.clear();
 
@@ -164,103 +148,154 @@ int main()
     return 0;
 }
 
-
-
-void handleMatrix(const cv::Mat& src, cv::Mat& dst, cv::Mat& rescaled) {
+void handleMatrix(const cv::Mat& src, cv::Mat& dst) {
     using namespace cv;
     using namespace std;
     
     if (!dst.empty())
         dst.release();
-    if (!rescaled.empty())
-        rescaled.release();
 
-    Mat smallMat;
-    //resize(laplasiaze(src), smallMat, Size(), 0.04, 0.04, INTER_LINEAR);
-    GaussianBlur(src, smallMat, Size(51, 51), 0, 0, BORDER_DEFAULT);
-    namedWindow("gauss blur 15", WINDOW_NORMAL);
-    imshow("gauss blur 15", smallMat);
-    //resize(src, smallMat, Size(), 0.04, 0.04, INTER_LINEAR);
-    resize(smallMat, smallMat, Size(), 0.04, 0.04, INTER_LINEAR);
-    
-    Mat cannyed;
-    int cApertureSize = 3;
-    double cThres1 = 20;
-    double cThres2 = 40;
-    Canny(smallMat, cannyed, cThres1, cThres2, cApertureSize);
-
-    Mat morphKernel = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-    dilate(cannyed, cannyed, morphKernel);
-    erode(cannyed, cannyed, morphKernel);
-
-    Mat rgb;
-    cvtColor(cannyed, rgb, COLOR_GRAY2RGB);
-
-    vector<Vec4i> linesP; // will hold the results of the detection
-    double rho = 0.5;
-    double theta = CV_PI / (180 / rho);
-    HoughLinesP(cannyed, linesP, rho, theta, 20, 30, 5); // runs the actual detection
-
-    TLine::maxX = cannyed.cols;
-    TLine::maxY = cannyed.rows;
-    TLine* myLines = new TLine[linesP.size()];
-    for (size_t i = 0; i < linesP.size(); i++)
-    {
-        Vec4i l = linesP[i];
-        line(rgb, cv::Point(l[0], l[1]), cv::Point(l[2], l[3]), cv::Scalar(0, 0, 255), 1, cv::LINE_AA);
-        myLines[i] = TLine( Point2d(l[0], l[1]), Point2d(l[2], l[3]) );
-    }
-
-    qsort(
-        myLines,
-        linesP.size(),
-        sizeof(TLine),
-        [](const void* a, const void* b) {
-            const TLine* l1 = static_cast<const TLine*>(a);
-            const TLine* l2 = static_cast<const TLine*>(b);
-            if (l1->angle < l2->angle) return -1;
-            if (l1->angle > l2->angle) return 1;
-            return 0;
-        });
+    Mat mask;
+    uchar backg1;
+    uchar backg2;
+    templatePictureMaker(src, mask, 0, 0, src.rows, src.cols);
 
 
+    namedWindow("mask", WINDOW_NORMAL);
+    imshow("mask", mask);
 
-    resize(rgb, rescaled, Size(512, 512), 0, 0, INTER_LINEAR);
-    cannyed.release();
-    rgb.release();
-    dst = smallMat;
+    Mat dilated;
+    Mat dk11 = getStructuringElement(MORPH_ELLIPSE, Size(11, 11));
+    Mat dk15 = getStructuringElement(MORPH_ELLIPSE, Size(15, 15));
+    Mat ek3 = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
+    dilate(mask, dilated, dk11);
+    erode(dilated, dilated, ek3);
+    dilate(dilated, dilated, dk15);
+
+    mask.release();
+
+    dst = dilated;
 }
 
-cv::Mat laplasiaze(const cv::Mat& src) {
+void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int start_j, int ni, int nj) {
     using namespace cv;
 
-    Mat kernel = (Mat_<float>(3, 3) <<
-        1, 1, 1,
-        1, -8, 1,
-        1, 1, 1);
+    GaussianBlur(src, src, Size(3, 3), 0);
 
-    //Mat imgLaplacian;
-    //filter2D(src, imgLaplacian, CV_32F, kernel);
-    //Mat sharp;
-    //src.convertTo(sharp, CV_32F);
-    //Mat imgResult = sharp - imgLaplacian;
-    //// convert back to 8bits gray scale 
-    //imgResult.convertTo(imgResult, CV_8UC3);
-    //imgLaplacian.convertTo(imgLaplacian, CV_8UC3);
-    //// imshow( "Laplace Filtered Image", imgLaplacian ); 
-    //namedWindow("New Sharped Image", WINDOW_NORMAL); // Create a window to display results 
-    //imshow("New Sharped Image", imgResult);
+    // Вместо координат вершин будем хранить их номер от начала ядра. Пиксель с номером 0 имеет координаты [0;0],
+    // с номером 1 - [0;1], с номером n - [1; 0].
+    int delt_struct_size = 2 * ni * nj;
 
-    // Create binary image from source image 
-    Mat bw = src.clone();
-    //Mat bw = imgResult;
-    threshold(bw, bw, 40, 255, THRESH_BINARY);// | THRESH_OTSU);
-    //adaptiveThreshold(bw, bw, 255, ADAPTIVE_THRESH_GAUSSIAN_C, THRESH_BINARY, 5, 0); 
+    deltStruct* delt_arr = new deltStruct[delt_struct_size];
+    int arr_ptr = 0;
 
-    medianBlur(bw, bw, 15);
+    for (int i = start_i; i < start_i + ni - 1; i++) {
+        for (int j = start_j; j < start_j + nj - 1; j++) {
+            delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + (j - start_j);
+            delt_arr[arr_ptr].pix_num_finish = (i - start_i + 1) * nj + (j - start_j); // Вниз
+            delt_arr[arr_ptr].delta = abs((int)src.at<uchar>(i, j) - (int)src.at<uchar>(i + 1, j));
+            arr_ptr++;
 
-    namedWindow("Binary Image", WINDOW_NORMAL); // Create a window to display results 
-    imshow("Binary Image", bw);
+            delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + (j - start_j);
+            delt_arr[arr_ptr].pix_num_finish = (i - start_i) * nj + (j - start_j) + 1; // Вправо
+            delt_arr[arr_ptr].delta = abs((int)src.at<uchar>(i, j) - (int)src.at<uchar>(i, j + 1));
+            arr_ptr++;
+        }
+    }
 
-    return bw;
+    // Обрабатываем крайние пиксели отдельно (последняя строка и последний столбец)
+
+    for (int j = start_j; j < start_j + nj - 1; j++) {
+        delt_arr[arr_ptr].pix_num_start = nj * (ni - 1) + (j - start_j);
+        delt_arr[arr_ptr].pix_num_finish = nj * (ni - 1) + (j - start_j) + 1; // Вправо
+        delt_arr[arr_ptr].delta = abs((int)src.at<uchar>(start_i + ni - 1, j) - (int)src.at<uchar>(start_i + ni - 1, j + 1));
+        arr_ptr++;
+    }
+
+    for (int i = start_i; i < start_i + ni - 1; i++) {
+        delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + nj - 1;
+        delt_arr[arr_ptr].pix_num_finish = (i - start_i + 1) * nj + nj - 1; // Вниз
+        delt_arr[arr_ptr].delta = abs((int)src.at<uchar>(i, start_j + nj - 1) - (int)src.at<uchar>(i + 1, start_j + nj - 1));
+        arr_ptr++;
+    }
+
+    qsort(delt_arr, arr_ptr, sizeof(deltStruct), comparator); // Сортируем по возрастанию delta
+
+    int* rep_arr = new int[ni * nj]; // непересекающееся множество
+    std::fill_n(rep_arr, ni * nj, null_rep);
+
+    // Указатель на дельту. Хранит номер первого элемента в массиве delt_arr с delta = i. 
+    // Количество таких элементов: delta_ptr[i + 1] - delta_ptr[i]
+    int* delta_ptr = new int[delt_arr[arr_ptr - 1].delta + 2];
+    std::fill_n(delta_ptr, delt_arr[arr_ptr - 1].delta + 2, -1);
+
+    for (int i = 0; i < arr_ptr; i++)
+        if (delta_ptr[delt_arr[i].delta] == -1) // Встречен первый элемент с такой delta
+            delta_ptr[delt_arr[i].delta] = i;
+    delta_ptr[delt_arr[arr_ptr - 1].delta + 1] = arr_ptr;
+
+    //Убираем -1, если они остались
+    for (int i = 0, j = 0; i < delt_arr[arr_ptr - 1].delta + 1; i++) {
+        if (delta_ptr[i] == -1) { // Не было элементов с такой delta
+            j = i + 1;
+            while (delta_ptr[j] == -1)
+                j++;
+            delta_ptr[i] = delta_ptr[j];
+        }
+    }
+
+    int cur_delta = 1, u, v;
+    int component_cnt = (ni - start_i) * (nj - start_j);
+
+    for (int i = delta_ptr[cur_delta - 1]; i < delta_ptr[delta_bound]; i++) {
+        // Не находятся в одном множестве
+        u = getRep(rep_arr, delt_arr[i].pix_num_start);
+        v = getRep(rep_arr, delt_arr[i].pix_num_finish);
+
+        if (u != v) {
+            if (rand() % 2 == 0)
+                rep_arr[u] = v;
+            else
+                rep_arr[v] = u;
+        }
+    }
+
+    // Подсчитываем количество вершин в каждой компоненте и сумму цветов
+    int* color_sum = new int[ni * nj]{ 0 };
+    int* vertex_cnt = new int[ni * nj]{ 0 };
+    for (int i = 0; i < ni * nj; i++) {
+        u = getRep(rep_arr, i);
+        color_sum[u] += (int)src.at<uchar>(start_i + u / nj, start_j + u % nj);
+        //if (rep_arr[i] != null_rep)
+        vertex_cnt[u]++;
+    }
+
+    Mat resImg = Mat::zeros(ni, nj, CV_8UC1);
+    for (int i = 0; i < ni; i++)
+        for (int j = 0; j < nj; j++) {
+            u = getRep(rep_arr, i * nj + j);
+            //resImg.at<uchar>(i, j) = floor((float)color_sum[u] / (vertex_cnt[u]));// - min_color;
+            
+            // vertex_cnt[u] - кол-во вершин в компоненте (если 1 , то лопатка)
+            uchar color;
+            if (vertex_cnt[u] <= 25)
+                color = 255;
+            else color = 0;
+            resImg.at<uchar>(i, j) = color;;
+        }
+    
+    if (!dst.empty())
+        dst.release();
+
+    //for (int i = delta_ptr[0]; i < delta_ptr[1]; i++)
+    //    std::cout << rep_arr[i] << '\n';
+
+
+    dst = resImg;
+
+    delete[] delt_arr;
+    delete[] rep_arr;
+    delete[] delta_ptr;
+    delete[] color_sum;
+    delete[] vertex_cnt;
 }

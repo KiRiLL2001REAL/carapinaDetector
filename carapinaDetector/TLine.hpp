@@ -22,13 +22,23 @@ public:
     inline TLine(const cv::Point2d& p0, const cv::Point2d& p1);
 
     inline double dist(const TLine& right);
+
+    TLine operator=(const TLine& right) {
+        angle = right.angle;
+        vec = right.vec;
+        pos[0] = right.pos[0];
+        pos[1] = right.pos[1];
+        straight[0] = right.straight[0];
+        straight[1] = right.straight[1];
+        return *this;
+    }
 };
 
 int TLine::maxX = -1;
 int TLine::maxY = -1;
 
 inline int TLine::smoothCompare(double x, double y) {
-    if (abs(x - y) <= extra::eps) return 0;
+    if (abs(x - y) <= extra::eps * 3) return 0;
     if (x < y) return -1;
     return 1;
 }
@@ -98,7 +108,21 @@ inline TLine::TLine(const cv::Point2d& p0, const cv::Point2d& p1) : TLine() {
 }
 
 inline double TLine::dist(const TLine& right) {
-    cv::Point2d c = straight[0] + straight[1];
+    cv::Point2d p1 = straight[0];
+    cv::Point2d p2 = straight[1];
+    cv::Point2d p3 = right.straight[0];
+    cv::Point2d p4 = right.straight[1];
+
+    double add = p1.x * p2.y + p2.x * p3.y + p3.x * p4.y + p4.x * p1.y;
+    double sub = p2.x * p1.y + p3.x * p2.y + p4.x * p3.y + p1.x * p4.y;
+    double square = abs(add - sub) * 0.5;
+
+    cv::Point2d vect = p1 - p2;
+    double osnl = sqrt(vect.x * vect.x + vect.y * vect.y);
+
+    return square / osnl;
+
+    /*cv::Point2d c = straight[0] + straight[1];
     c /= 2;
 
     double x1;
@@ -130,5 +154,5 @@ inline double TLine::dist(const TLine& right) {
     double dx = c.x - cpoint.x;
     double dy = c.y - cpoint.y;
 
-    return sqrt(dx * dx + dy * dy);
+    return sqrt(dx * dx + dy * dy);*/
 }
