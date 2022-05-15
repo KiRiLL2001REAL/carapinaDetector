@@ -9,7 +9,7 @@
 
 const std::string DATASET_PATH = "C:\\Dataset";
 
-void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path);
+void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::string& path);
 
 #define null_rep -1
 #define component_cnt_max 100
@@ -26,7 +26,7 @@ int getRep(int* rep_arr, int x) {
     rep_arr[x] = getRep(rep_arr, rep_arr[x]);
     return rep_arr[x];
 }
-void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int start_j, int ni, int nj);
+void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedFlat, int start_i, int start_j, int ni, int nj);
 
 int main()
 {
@@ -61,7 +61,9 @@ int main()
     //cv::namedWindow("rescaledMat");
 
     cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
-    cv::Mat mask;
+    cv::Mat binarizedFlatMat;
+    cv::Mat flatMat;
+    cv::Mat lopatkaMask;
 
     cv::Mat tmpMat;
     cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
@@ -113,13 +115,17 @@ int main()
 
             grayMat.release();
             grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
-            mask.release();
-            handleMatrix(grayMat, mask, imagePath[counter]);
+            
+            binarizedFlatMat.release();
+            flatMat.release();
+            lopatkaMask.release();
+            templatePictureMaker(grayMat, flatMat, binarizedFlatMat, 0, 0, grayMat.rows, grayMat.cols);
+            makeLopatkaMask(binarizedFlatMat, lopatkaMask, imagePath[counter]);
 
             cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
             for (int i = 0; i < grayMat.rows; i++)
                 for (int j = 0; j < grayMat.cols; j++) {
-                    if (mask.at<uchar>(i, j) == 255) {
+                    if (binarizedFlatMat.at<uchar>(i, j) == 255) {
                         tmpMat.at<cv::Vec4b>(i, j)[0] = 255;
                         tmpMat.at<cv::Vec4b>(i, j)[3] = 255;
                     }
@@ -148,26 +154,23 @@ int main()
     return 0;
 }
 
-void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
+void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::string& path) {
     using namespace cv;
     using namespace std;
 
     if (!dst.empty())
         dst.release();
 
-    Mat mask;
-    uchar backg1;
-    uchar backg2;
-    templatePictureMaker(src, mask, 0, 0, src.rows, src.cols);
+    Mat bwFlat = binarizedFlatMat.clone();
 
     Mat dilated;
     Mat dk11 = getStructuringElement(MORPH_ELLIPSE, Size(11, 11));
     Mat dk15 = getStructuringElement(MORPH_ELLIPSE, Size(15, 15));
     Mat ek3 = getStructuringElement(MORPH_ELLIPSE, Size(3, 3));
-    dilate(mask, dilated, dk11);
+    dilate(bwFlat, dilated, dk11);
     erode(dilated, dilated, ek3);
     dilate(dilated, dilated, dk15);
-    mask.release();
+    bwFlat.release();
 
     Mat cannyed;
     Canny(dilated, cannyed, 10, 255, 3);
@@ -190,16 +193,34 @@ void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
     }
 
     size_t maxIndex = 0;
-    double maxArea = contourArea(contours[0]);
+    size_t prevMaxIndex = 0;
+    double maxLength = arcLength(contours[0], true);
+    double prevMaxLength = maxLength;
     for (size_t i = 1; i < contours.size(); i++) {
-        double area = contourArea(contours[i]);
-        if (area > maxArea) {
-            maxArea = area;
+        double length = arcLength(contours[i], true);
+        if (length > maxLength) {
+            prevMaxLength = maxLength;
+            prevMaxIndex = maxIndex;
+            maxLength = length;
             maxIndex = i;
+        }
+        else if (length > prevMaxLength) {
+            prevMaxLength = length;
+            prevMaxIndex = i;
         }
     }
 
+    contours[maxIndex].insert(contours[maxIndex].end(), contours[prevMaxIndex].begin(), contours[prevMaxIndex].end());
+
     RotatedRect rrect = minAreaRect(contours[maxIndex]);
+    vector<Point2f> rectPoints(4);
+    rrect.points(rectPoints.data());
+
+    vector<vector<Point>> rectContour(1);
+    rectContour[0] = vector<Point>(4);
+    for (int i = 0; i < 4; i++)
+        rectContour[0][i] = Point(rectPoints[i].x, rectPoints[i].y);
+    drawContours(drawing, rectContour, 0, Scalar(0, 0, 255), 2);
 
     
 
@@ -212,21 +233,29 @@ void handleMatrix(const cv::Mat& src, cv::Mat& dst, const std::string& path) {
     dst = cannyed;
 }
 
-void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int start_j, int ni, int nj) {
+void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedFlat, int start_i, int start_j, int ni, int nj)
+{
     using namespace cv;
 
     Mat blured;
     GaussianBlur(src, blured, Size(3, 3), 0);
+    /*namedWindow("Source Image", WINDOW_NORMAL);
+    imshow("Source Image", src);*/
 
     // Вместо координат вершин будем хранить их номер от начала ядра. Пиксель с номером 0 имеет координаты [0;0],
     // с номером 1 - [0;1], с номером n - [1; 0].
     int delt_struct_size = 2 * ni * nj;
 
     deltStruct* delt_arr = new deltStruct[delt_struct_size];
-    int arr_ptr = 0;
+    int arr_ptr = 0; //min_color = (int)src.at<uchar>(start_i, start_j);
 
-    for (int i = start_i; i < start_i + ni - 1; i++) {
-        for (int j = start_j; j < start_j + nj - 1; j++) {
+    for (int i = start_i; i < start_i + ni - 1; i++)
+    {
+        for (int j = start_j; j < start_j + nj - 1; j++)
+        {
+            /*if ((int)src.at<uchar>(i, j) < min_color)
+              min_color = (int)src.at<uchar>(i, j);*/
+
             delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + (j - start_j);
             delt_arr[arr_ptr].pix_num_finish = (i - start_i + 1) * nj + (j - start_j); // Вниз
             delt_arr[arr_ptr].delta = abs((int)blured.at<uchar>(i, j) - (int)blured.at<uchar>(i + 1, j));
@@ -241,14 +270,22 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int sta
 
     // Обрабатываем крайние пиксели отдельно (последняя строка и последний столбец)
 
-    for (int j = start_j; j < start_j + nj - 1; j++) {
+    for (int j = start_j; j < start_j + nj - 1; j++)
+    {
+        /*if ((int)src.at<uchar>(start_i + ni - 1, j) < min_color)
+          min_color = (int)src.at<uchar>(start_i + ni - 1, j);*/
+
         delt_arr[arr_ptr].pix_num_start = nj * (ni - 1) + (j - start_j);
         delt_arr[arr_ptr].pix_num_finish = nj * (ni - 1) + (j - start_j) + 1; // Вправо
         delt_arr[arr_ptr].delta = abs((int)blured.at<uchar>(start_i + ni - 1, j) - (int)blured.at<uchar>(start_i + ni - 1, j + 1));
         arr_ptr++;
     }
 
-    for (int i = start_i; i < start_i + ni - 1; i++) {
+    for (int i = start_i; i < start_i + ni - 1; i++)
+    {
+        /*if ((int)src.at<uchar>(i, start_j + nj - 1) < min_color)
+          min_color = (int)src.at<uchar>(i, start_j + nj - 1);*/
+
         delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + nj - 1;
         delt_arr[arr_ptr].pix_num_finish = (i - start_i + 1) * nj + nj - 1; // Вниз
         delt_arr[arr_ptr].delta = abs((int)blured.at<uchar>(i, start_j + nj - 1) - (int)blured.at<uchar>(i + 1, start_j + nj - 1));
@@ -257,6 +294,9 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int sta
 
     qsort(delt_arr, arr_ptr, sizeof(deltStruct), comparator); // Сортируем по возрастанию delta
 
+    /*for (int i = 0; i < arr_ptr; i++)
+      cout << delt_arr[i].delta << endl;*/
+
     int* rep_arr = new int[ni * nj]; // непересекающееся множество
     std::fill_n(rep_arr, ni * nj, null_rep);
 
@@ -264,6 +304,7 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int sta
     // Количество таких элементов: delta_ptr[i + 1] - delta_ptr[i]
     int* delta_ptr = new int[delt_arr[arr_ptr - 1].delta + 2];
     std::fill_n(delta_ptr, delt_arr[arr_ptr - 1].delta + 2, -1);
+    //int* comp_cnt = new int[component_cnt_max] {0};
 
     for (int i = 0; i < arr_ptr; i++)
         if (delta_ptr[delt_arr[i].delta] == -1) // Встречен первый элемент с такой delta
@@ -271,8 +312,10 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int sta
     delta_ptr[delt_arr[arr_ptr - 1].delta + 1] = arr_ptr;
 
     //Убираем -1, если они остались
-    for (int i = 0, j = 0; i < delt_arr[arr_ptr - 1].delta + 1; i++) {
-        if (delta_ptr[i] == -1) { // Не было элементов с такой delta
+    for (int i = 0, j = 0; i < delt_arr[arr_ptr - 1].delta + 1; i++)
+    {
+        if (delta_ptr[i] == -1) // Не было элементов с такой delta
+        {
             j = i + 1;
             while (delta_ptr[j] == -1)
                 j++;
@@ -280,58 +323,60 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& dst, int start_i, int sta
         }
     }
 
+    //for (int i = 0; i < delt_arr[arr_ptr - 1].delta + 2; i++)
+    //  cout << delta_ptr[i] << endl;
+
     int cur_delta = 1, u, v;
     int component_cnt = (ni - start_i) * (nj - start_j);
 
-    for (int i = delta_ptr[cur_delta - 1]; i < delta_ptr[delta_bound]; i++) {
+    //component_cnt += (delta_ptr[cur_delta] - delta_ptr[cur_delta - 1]);
+
+    for (int i = delta_ptr[cur_delta - 1]; i < delta_ptr[delta_bound]; i++)
+    {
         // Не находятся в одном множестве
         u = getRep(rep_arr, delt_arr[i].pix_num_start);
         v = getRep(rep_arr, delt_arr[i].pix_num_finish);
 
-        if (u != v) {
+        if (u != v)
+        {
             if (rand() % 2 == 0)
                 rep_arr[u] = v;
             else
                 rep_arr[v] = u;
+            //component_cnt--;
         }
     }
-
     // Подсчитываем количество вершин в каждой компоненте и сумму цветов
     int* color_sum = new int[ni * nj]{ 0 };
     int* vertex_cnt = new int[ni * nj]{ 0 };
-    for (int i = 0; i < ni * nj; i++) {
+    for (int i = 0; i < ni * nj; i++)
+    {
         u = getRep(rep_arr, i);
         color_sum[u] += (int)blured.at<uchar>(start_i + u / nj, start_j + u % nj);
-        //if (rep_arr[i] != null_rep)
         vertex_cnt[u]++;
     }
 
     Mat resImg = Mat::zeros(ni, nj, CV_8UC1);
+    Mat maskImg = Mat::zeros(ni, nj, CV_8UC1);
     for (int i = 0; i < ni; i++)
-        for (int j = 0; j < nj; j++) {
+        for (int j = 0; j < nj; j++)
+        {
             u = getRep(rep_arr, i * nj + j);
-            //resImg.at<uchar>(i, j) = floor((float)color_sum[u] / (vertex_cnt[u]));// - min_color;
+            resImg.at<uchar>(i, j) = floor((float)color_sum[u] / (vertex_cnt[u]));// - min_color;
 
-            // vertex_cnt[u] - кол-во вершин в компоненте (если 1 , то лопатка)
             uchar color;
             if (vertex_cnt[u] <= 25)
                 color = 255;
             else color = 0;
-            resImg.at<uchar>(i, j) = color;;
+            maskImg.at<uchar>(i, j) = color;
         }
-
-    if (!dst.empty())
-        dst.release();
-
-    //for (int i = delta_ptr[0]; i < delta_ptr[1]; i++)
-    //    std::cout << rep_arr[i] << '\n';
-
-
-    dst = resImg;
 
     delete[] delt_arr;
     delete[] rep_arr;
     delete[] delta_ptr;
     delete[] color_sum;
     delete[] vertex_cnt;
+
+    flat = resImg;
+    binarizedFlat = maskImg;
 }
