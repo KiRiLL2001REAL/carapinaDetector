@@ -127,7 +127,7 @@ int main()
             cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
             for (int i = 0; i < grayMat.rows; i++)
                 for (int j = 0; j < grayMat.cols; j++) {
-                    if (binarizedFlatMat.at<uchar>(i, j) == 255) {
+                    if (lopatkaMask.at<uchar>(i, j) == 255) {
                         tmpMat.at<cv::Vec4b>(i, j)[0] = 255;
                         tmpMat.at<cv::Vec4b>(i, j)[3] = 255;
                     }
@@ -186,31 +186,14 @@ void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::s
     vector<vector<Point> > contours;
     vector<Vec4i> hierarchy;
     findContours(cannyed, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
-    Mat drawing = Mat::zeros(cannyed.size(), CV_8UC3);
+    cannyed.release();
+    /*Mat drawing = Mat::zeros(cannyed.size(), CV_8UC3);
     RNG rng(12345);
     for (size_t i = 0; i < contours.size(); i++)
     {
         Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
         drawContours(drawing, contours, (int)i, color, 1, LINE_8, hierarchy, 0);
-    }
-
-    //size_t maxIndex = 0;
-    //size_t prevMaxIndex = 0;
-    //double maxLength = arcLength(contours[0], true);
-    //double prevMaxLength = maxLength;
-    //for (size_t i = 1; i < contours.size(); i++) {
-    //    double length = arcLength(contours[i], true);
-    //    if (length > maxLength) {
-    //        prevMaxLength = maxLength;
-    //        prevMaxIndex = maxIndex;
-    //        maxLength = length;
-    //        maxIndex = i;
-    //    }
-    //    else if (length > prevMaxLength) {
-    //        prevMaxLength = length;
-    //        prevMaxIndex = i;
-    //    }
-    //}
+    }*/
     Rect arect = boundingRect(contours[0]);
 
     size_t maxIndexSize = 0;
@@ -261,17 +244,19 @@ void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::s
     rectContour[0] = vector<Point>(4);
     for (int i = 0; i < 4; i++)
         rectContour[0][i] = Point(rectPoints[i].x, rectPoints[i].y);
-    drawContours(drawing, rectContour, 0, Scalar(0, 0, 255), 2);
+    //drawContours(drawing, rectContour, 0, Scalar(0, 0, 255), 2);
 
-    
-
-    std::string p = path;
+    /*std::string p = path;
     p.insert(3, "out\\");
     
     imwrite(p + ".bmp", drawing);
-    drawing.release();
+    drawing.release();*/
 
-    dst = cannyed;
+    Mat mask = Mat::zeros(binarizedFlatMat.size(), CV_8UC1);
+    drawContours(mask, rectContour, 0, Scalar(255), 1);
+    floodFill(mask, Point(rrect.center), Scalar(255));
+
+    dst = mask;
 }
 
 void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedFlat, int start_i, int start_j, int ni, int nj)
