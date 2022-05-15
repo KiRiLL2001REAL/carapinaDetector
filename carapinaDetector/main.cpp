@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "extra.hpp"
+#include "sift.h"
 
 
 //const std::string DATASET_PATH = "C:\\Dataset";
@@ -41,6 +42,10 @@ int main()
     extra::loadFilenames(DATASET_PATH, ".jpg", imagePath);
     extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
 
+    
+    map<int, cv::Mat> descriptors;
+    loadModels("C:\\Repo\\carapinaDetector\\descriptors\\", descriptors);
+
     if (imagePath.empty()) {
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
         return 0;
@@ -53,7 +58,7 @@ int main()
     sf::Font font;
     font.loadFromFile("C:\\Windows\\Fonts\\courbd.ttf");
     sf::Text text;
-    text.setString(imagePath[0]);
+    text.setString(imagePath[5]);
     text.setFont(font);
     text.setFillColor(sf::Color::White);
     text.setOutlineThickness(1.5);
@@ -62,10 +67,9 @@ int main()
 
     //cv::namedWindow("rescaledMat");
 
-    cv::Mat grayMat = cv::imread(imagePath[0], cv::IMREAD_GRAYSCALE);
+    cv::Mat grayMat = cv::imread(imagePath[5], cv::IMREAD_GRAYSCALE);
     cv::Mat binarizedFlatMat;
     cv::Mat flatMat;
-    cv::Mat lopatkaMask;
 
     cv::Mat tmpMat;
     cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
@@ -77,7 +81,7 @@ int main()
     float scale = float(WIN_WIDTH) / sprite.getLocalBounds().width;
     sprite.setScale({ scale, scale });
 
-    int counter = 0;
+    int counter = 5;
     const int imgDelayMillis = 0;
 
     bool finished = false;
@@ -117,21 +121,51 @@ int main()
 
             grayMat.release();
             grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
-            
+
+            int img_name_ptr = imagePath[counter].find_last_of("\\");
+            int img_extension_ptr = imagePath[counter].find_last_of(".");
+            string imgName = imagePath[counter].substr(img_name_ptr + 1, img_extension_ptr - img_name_ptr - 1);
+
+            // background - 0
+            // lopatka - 1
+            // sled_ot_frezi - 2 <-
+            // zaboina - 3       <-
+            // carapina - 4
+            // riska - 5
+            // nadir - 6         <-
+            // chernota - 7      <-
+
+            map<int, cv::Mat> masks;
+            GetMasks(grayMat, descriptors, 6, masks);
+
             binarizedFlatMat.release();
             flatMat.release();
-            lopatkaMask.release();
             templatePictureMaker(grayMat, flatMat, binarizedFlatMat, 0, 0, grayMat.rows, grayMat.cols);
-            makeLopatkaMask(binarizedFlatMat, lopatkaMask, imagePath[counter]);
+            makeLopatkaMask(binarizedFlatMat, masks[1], imagePath[counter]);
+
+            cv::Mat outMASK = cv::Mat::zeros(grayMat.size(), CV_8U);
+            for (auto& maskIt : masks) {
+                for (int i = 0; i < outMASK.rows; i++)
+                    for (int j = 0; j < outMASK.cols; j++)
+                        if (maskIt.second.at<uchar>(i, j) == 255)
+                            outMASK.at<uchar>(i, j) = maskIt.first * 30;
+            }
+
+            imwrite("C:\\out\\" + imgName + "_seg.png", outMASK);
+
+            outMASK.release();
+            for (auto& it : masks)
+                it.second.release();
+            map<int, cv::Mat>().swap(masks);
 
             cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
-            for (int i = 0; i < grayMat.rows; i++)
-                for (int j = 0; j < grayMat.cols; j++) {
-                    if (lopatkaMask.at<uchar>(i, j) == 255) {
-                        tmpMat.at<cv::Vec4b>(i, j)[0] = 255;
-                        tmpMat.at<cv::Vec4b>(i, j)[3] = 255;
-                    }
-                }
+            //for (int i = 0; i < grayMat.rows; i++)
+            //    for (int j = 0; j < grayMat.cols; j++) {
+            //        if (lopatkaMask.at<uchar>(i, j) == 255) {
+            //            tmpMat.at<cv::Vec4b>(i, j)[0] = 255;
+            //            tmpMat.at<cv::Vec4b>(i, j)[3] = 255;
+            //        }
+            //    }
             image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
             tmpMat.release();
             texture.loadFromImage(image);
@@ -187,13 +221,6 @@ void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::s
     vector<Vec4i> hierarchy;
     findContours(cannyed, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE);
     cannyed.release();
-    /*Mat drawing = Mat::zeros(cannyed.size(), CV_8UC3);
-    RNG rng(12345);
-    for (size_t i = 0; i < contours.size(); i++)
-    {
-        Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
-        drawContours(drawing, contours, (int)i, color, 1, LINE_8, hierarchy, 0);
-    }*/
     Rect arect = boundingRect(contours[0]);
 
     size_t maxIndexSize = 0;
@@ -244,13 +271,6 @@ void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::s
     rectContour[0] = vector<Point>(4);
     for (int i = 0; i < 4; i++)
         rectContour[0][i] = Point(rectPoints[i].x, rectPoints[i].y);
-    //drawContours(drawing, rectContour, 0, Scalar(0, 0, 255), 2);
-
-    /*std::string p = path;
-    p.insert(3, "out\\");
-    
-    imwrite(p + ".bmp", drawing);
-    drawing.release();*/
 
     Mat mask = Mat::zeros(binarizedFlatMat.size(), CV_8UC1);
     drawContours(mask, rectContour, 0, Scalar(255), 1);
