@@ -62,29 +62,35 @@ float kv(Mat& src1, Mat& src2, int& row1, int& row2, float& minK) {
 	return k;
 }
 
+DMatch matchSp(Mat& src1, Mat& src2, int& row1) {
+	DMatch q;
+	q.queryIdx = row1;
+	q.distance = kv(src1, src2, row1, 0);
+	q.trainIdx = 0;
+	double rast;
+	for (int row2 = 1; row2 < src2.rows; row2++) {
+		rast = kv(src1, src2, row1, row2, q.distance);
+		if (rast < q.distance)
+		{
+			q.distance = rast;
+			q.trainIdx = row2;
+			if (q.distance < 0.001)
+				return q;
+		}
+	}
+	return q;
+}
+
 void match(Mat& src1, Mat& src2, vector<DMatch>& matches) {
 	matches.clear();
+	matches.resize(src1.rows);
+
+	#pragma omp parallel for
 	for (int row1 = 0; row1 < src1.rows; row1++) {
-		DMatch q;
-		q.queryIdx = row1;
-		q.distance = kv(src1, src2, row1, 0);
-		q.trainIdx = 0;
-		double rast;
-		for (int row2 = 1; row2 < src2.rows; row2++) {
-			rast = kv(src1, src2, row1, row2, q.distance);
-			if (rast < q.distance)
-			{
-				q.distance = rast;
-				q.trainIdx = row2;
-				if (q.distance == 0)
-					break;
-			}
-		}
-		matches.push_back(q);
+		matches[row1] = matchSp(src1, src2, row1);
 	}
 }
 
-//*************************************************************************TODO распараллелить
 vector<int> recognize(map<int, Mat>& descriptors, Mat Desc) {
 	vector<int> qm;
 	map<int, vector<DMatch>> full;
@@ -135,8 +141,11 @@ void GetMasks(Mat& src, map<int, Mat>& descriptors, double SizeThreshold, map<in
 
 	for (auto it : Dkeypoints) {
 		Masks[it.first] = Mat::zeros(mySrc.size(), CV_8UC1);
+
+		#pragma omp parallel for
 		for (int i = 0; i < it.second.size(); i++) {
-			cv::circle(Masks[it.first], Point(Dkeypoints[it.first][i].pt.x, Dkeypoints[it.first][i].pt.y), Dkeypoints[it.first][i].size / 2, Scalar::all(255), -1);
+			//cv::circle(Masks[it.first], Point(Dkeypoints[it.first][i].pt.x, Dkeypoints[it.first][i].pt.y), Dkeypoints[it.first][i].size / 2, Scalar::all(255), -1);
+			cv::circle(Masks[it.first], Point(Dkeypoints[it.first][i].pt.x, Dkeypoints[it.first][i].pt.y), Dkeypoints[it.first][i].size * 0.75, Scalar::all(255), -1); // (radius / 2) * 1.5
 			Dkeypoints[it.first][i].size *= 2;
 		}
 	}

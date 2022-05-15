@@ -44,12 +44,15 @@ int main()
 
     
     map<int, cv::Mat> descriptors;
-    loadModels("C:\\Repo\\carapinaDetector\\descriptors\\", descriptors);
+    loadModels("D:\\IDE\\Microsoft Visual Studio\\Repository\\carapinaDetector\\descriptors", descriptors);
 
     if (imagePath.empty()) {
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
         return 0;
     }
+
+    int counter = 0;
+    const int imgDelayMillis = 0;
 
     sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Carapina detector", sf::Style::Close);
     sf::Image image;
@@ -58,7 +61,7 @@ int main()
     sf::Font font;
     font.loadFromFile("C:\\Windows\\Fonts\\courbd.ttf");
     sf::Text text;
-    text.setString(imagePath[5]);
+    text.setString(imagePath[counter]);
     text.setFont(font);
     text.setFillColor(sf::Color::White);
     text.setOutlineThickness(1.5);
@@ -67,7 +70,7 @@ int main()
 
     //cv::namedWindow("rescaledMat");
 
-    cv::Mat grayMat = cv::imread(imagePath[5], cv::IMREAD_GRAYSCALE);
+    cv::Mat grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
     cv::Mat binarizedFlatMat;
     cv::Mat flatMat;
 
@@ -80,9 +83,6 @@ int main()
 
     float scale = float(WIN_WIDTH) / sprite.getLocalBounds().width;
     sprite.setScale({ scale, scale });
-
-    int counter = 5;
-    const int imgDelayMillis = 0;
 
     bool finished = false;
     bool needUpdate = true;
@@ -136,12 +136,15 @@ int main()
             // chernota - 7      <-
 
             map<int, cv::Mat> masks;
-            GetMasks(grayMat, descriptors, 6, masks);
 
             binarizedFlatMat.release();
             flatMat.release();
             templatePictureMaker(grayMat, flatMat, binarizedFlatMat, 0, 0, grayMat.rows, grayMat.cols);
-            makeLopatkaMask(binarizedFlatMat, masks[1], imagePath[counter]);
+            makeLopatkaMask(binarizedFlatMat, masks[1], imagePath[counter]); // 1
+
+            //imwrite("C:\\out\\flat1\\" + imgName + ".png", flatMat);
+
+            GetMasks(grayMat, descriptors, 6, masks); // 2,3,6,7
 
             cv::Mat outMASK = cv::Mat::zeros(grayMat.size(), CV_8U);
             for (auto& maskIt : masks) {
@@ -295,48 +298,56 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedF
     deltStruct* delt_arr = new deltStruct[delt_struct_size];
     int arr_ptr = 0; //min_color = (int)src.at<uchar>(start_i, start_j);
 
-    for (int i = start_i; i < start_i + ni - 1; i++)
+    int borderI = start_i + ni - 1;
+    int borderJ = start_j + nj - 1;
+    for (int i = start_i; i < borderI; i++)
     {
-        for (int j = start_j; j < start_j + nj - 1; j++)
+#pragma omp parallel for reduction(+:arr_ptr)
+        for (int j = start_j; j < borderJ; j++)
         {
             /*if ((int)src.at<uchar>(i, j) < min_color)
               min_color = (int)src.at<uchar>(i, j);*/
+            
+            delt_arr[(i * borderJ + j) * 2].pix_num_start = (i - start_i) * nj + (j - start_j);
+            delt_arr[(i * borderJ + j) * 2].pix_num_finish = (i - start_i + 1) * nj + (j - start_j); // Вниз
+            delt_arr[(i * borderJ + j) * 2].delta = abs((int)blured.at<uchar>(i, j) - (int)blured.at<uchar>(i + 1, j));
 
-            delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + (j - start_j);
-            delt_arr[arr_ptr].pix_num_finish = (i - start_i + 1) * nj + (j - start_j); // Вниз
-            delt_arr[arr_ptr].delta = abs((int)blured.at<uchar>(i, j) - (int)blured.at<uchar>(i + 1, j));
-            arr_ptr++;
+            delt_arr[(i * borderJ + j) * 2 + 1].pix_num_start = (i - start_i) * nj + (j - start_j);
+            delt_arr[(i * borderJ + j) * 2 + 1].pix_num_finish = (i - start_i) * nj + (j - start_j) + 1; // Вправо
+            delt_arr[(i * borderJ + j) * 2 + 1].delta = abs((int)blured.at<uchar>(i, j) - (int)blured.at<uchar>(i, j + 1));
 
-            delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + (j - start_j);
-            delt_arr[arr_ptr].pix_num_finish = (i - start_i) * nj + (j - start_j) + 1; // Вправо
-            delt_arr[arr_ptr].delta = abs((int)blured.at<uchar>(i, j) - (int)blured.at<uchar>(i, j + 1));
-            arr_ptr++;
+            arr_ptr += 2;
         }
     }
 
     // Обрабатываем крайние пиксели отдельно (последняя строка и последний столбец)
-
+    int cntr = 0;
+#pragma omp parallel for reduction(+:cntr)
     for (int j = start_j; j < start_j + nj - 1; j++)
     {
         /*if ((int)src.at<uchar>(start_i + ni - 1, j) < min_color)
           min_color = (int)src.at<uchar>(start_i + ni - 1, j);*/
 
-        delt_arr[arr_ptr].pix_num_start = nj * (ni - 1) + (j - start_j);
-        delt_arr[arr_ptr].pix_num_finish = nj * (ni - 1) + (j - start_j) + 1; // Вправо
-        delt_arr[arr_ptr].delta = abs((int)blured.at<uchar>(start_i + ni - 1, j) - (int)blured.at<uchar>(start_i + ni - 1, j + 1));
-        arr_ptr++;
+        delt_arr[arr_ptr + j - start_j].pix_num_start = nj * (ni - 1) + (j - start_j);
+        delt_arr[arr_ptr + j - start_j].pix_num_finish = nj * (ni - 1) + (j - start_j) + 1; // Вправо
+        delt_arr[arr_ptr + j - start_j].delta = abs((int)blured.at<uchar>(start_i + ni - 1, j) - (int)blured.at<uchar>(start_i + ni - 1, j + 1));
+        cntr++;
     }
+    arr_ptr += cntr;
 
+    cntr = 0;
+#pragma omp parallel for reduction(+:cntr)
     for (int i = start_i; i < start_i + ni - 1; i++)
     {
         /*if ((int)src.at<uchar>(i, start_j + nj - 1) < min_color)
           min_color = (int)src.at<uchar>(i, start_j + nj - 1);*/
 
-        delt_arr[arr_ptr].pix_num_start = (i - start_i) * nj + nj - 1;
-        delt_arr[arr_ptr].pix_num_finish = (i - start_i + 1) * nj + nj - 1; // Вниз
-        delt_arr[arr_ptr].delta = abs((int)blured.at<uchar>(i, start_j + nj - 1) - (int)blured.at<uchar>(i + 1, start_j + nj - 1));
-        arr_ptr++;
+        delt_arr[arr_ptr + i - start_i].pix_num_start = (i - start_i) * nj + nj - 1;
+        delt_arr[arr_ptr + i - start_i].pix_num_finish = (i - start_i + 1) * nj + nj - 1; // Вниз
+        delt_arr[arr_ptr + i - start_i].delta = abs((int)blured.at<uchar>(i, start_j + nj - 1) - (int)blured.at<uchar>(i + 1, start_j + nj - 1));
+        cntr++;
     }
+    arr_ptr += cntr;
 
     qsort(delt_arr, arr_ptr, sizeof(deltStruct), comparator); // Сортируем по возрастанию delta
 
@@ -405,6 +416,7 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedF
     Mat resImg = Mat::zeros(ni, nj, CV_8UC1);
     Mat maskImg = Mat::zeros(ni, nj, CV_8UC1);
     for (int i = 0; i < ni; i++)
+#pragma omp parallel for
         for (int j = 0; j < nj; j++)
         {
             u = getRep(rep_arr, i * nj + j);
