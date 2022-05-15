@@ -7,7 +7,8 @@
 #include "extra.hpp"
 
 
-const std::string DATASET_PATH = "C:\\Dataset";
+//const std::string DATASET_PATH = "C:\\Dataset";
+const std::string DATASET_PATH = "C:\\hack";
 
 void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::string& path);
 
@@ -38,6 +39,7 @@ int main()
     vector<string> imagePath = {};
 
     extra::loadFilenames(DATASET_PATH, ".jpg", imagePath);
+    extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
 
     if (imagePath.empty()) {
         cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
@@ -192,27 +194,66 @@ void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::s
         drawContours(drawing, contours, (int)i, color, 1, LINE_8, hierarchy, 0);
     }
 
-    size_t maxIndex = 0;
-    size_t prevMaxIndex = 0;
-    double maxLength = arcLength(contours[0], true);
-    double prevMaxLength = maxLength;
+    //size_t maxIndex = 0;
+    //size_t prevMaxIndex = 0;
+    //double maxLength = arcLength(contours[0], true);
+    //double prevMaxLength = maxLength;
+    //for (size_t i = 1; i < contours.size(); i++) {
+    //    double length = arcLength(contours[i], true);
+    //    if (length > maxLength) {
+    //        prevMaxLength = maxLength;
+    //        prevMaxIndex = maxIndex;
+    //        maxLength = length;
+    //        maxIndex = i;
+    //    }
+    //    else if (length > prevMaxLength) {
+    //        prevMaxLength = length;
+    //        prevMaxIndex = i;
+    //    }
+    //}
+    Rect arect = boundingRect(contours[0]);
+
+    size_t maxIndexSize = 0;
+    size_t prevMaxIndexSize = 0;
+    double maxSize = max(arect.size().width, arect.size().height);
+    double prevMaxSize = maxSize;
+
+    size_t maxIndexArea = 0;
+    size_t prevMaxIndexArea = 0;
+    double maxArea = arect.area();
+    double prevMaxArea = maxArea;
+
     for (size_t i = 1; i < contours.size(); i++) {
-        double length = arcLength(contours[i], true);
-        if (length > maxLength) {
-            prevMaxLength = maxLength;
-            prevMaxIndex = maxIndex;
-            maxLength = length;
-            maxIndex = i;
+        arect = boundingRect(contours[i]);
+        double size = max(arect.size().width, arect.size().height);
+        if (size > maxSize) {
+            prevMaxSize = maxSize;
+            prevMaxIndexSize = maxIndexSize;
+            maxSize = size;
+            maxIndexSize = i;
         }
-        else if (length > prevMaxLength) {
-            prevMaxLength = length;
-            prevMaxIndex = i;
+        else if (size > prevMaxSize) {
+            prevMaxSize = size;
+            prevMaxIndexSize = i;
+        }
+        double area = arect.area();
+        if (area > maxArea) {
+            prevMaxArea = maxArea;
+            prevMaxIndexArea = maxIndexArea;
+            maxArea = area;
+            maxIndexArea = i;
+        }
+        else if (area > prevMaxArea) {
+            prevMaxArea = area;
+            prevMaxIndexArea = i;
         }
     }
+    vector<Point> contour = vector<Point>(contours[maxIndexSize].begin(), contours[maxIndexSize].end());
+    contour.insert(contour.end(), contours[prevMaxIndexSize].begin(),     contours[prevMaxIndexSize].end());
+    contour.insert(contour.end(), contours[maxIndexArea].begin(),         contours[maxIndexArea].end());
+    contour.insert(contour.end(), contours[prevMaxIndexArea].begin(),     contours[prevMaxIndexArea].end());
 
-    contours[maxIndex].insert(contours[maxIndex].end(), contours[prevMaxIndex].begin(), contours[prevMaxIndex].end());
-
-    RotatedRect rrect = minAreaRect(contours[maxIndex]);
+    RotatedRect rrect = minAreaRect(contour);
     vector<Point2f> rectPoints(4);
     rrect.points(rectPoints.data());
 
