@@ -1,6 +1,5 @@
 ﻿#include <iostream>
 #include <opencv2/opencv.hpp>
-#include <SFML/Graphics.hpp>
 #include <string>
 #include <vector>
 
@@ -30,167 +29,196 @@ int getRep(int* rep_arr, int x) {
 }
 void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedFlat, int start_i, int start_j, int ni, int nj);
 
-int main()
+int main(int argc, char** argv)
 {
     using namespace std;
 
-    const int WIN_WIDTH = 1200;
-    const int WIN_HEIGHT = 700;
+    string workFolder = argv[0];
+    int pos = workFolder.find_last_of('\\');
+    if (pos != -1)
+        workFolder.erase(workFolder.begin() + pos + 1, workFolder.end());
+    else
+        workFolder = "\\";
 
-    vector<string> imagePath = {};
+    const string carap_model_folder = workFolder + "model\\Carap\\";
+    const string risk_model_folder =  workFolder + "model\\Risk\\";
+    const string trash_model_folder = workFolder + "model\\Trash\\";
 
-    extra::loadFilenames(DATASET_PATH, ".jpg", imagePath);
-    extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
+    cout << workFolder << '\n';
+    cout << carap_model_folder << '\n';
+    cout << risk_model_folder << '\n';
+    cout << trash_model_folder << '\n';
 
-
-    map<int, cv::Mat> descriptors;
-    loadModels("D:\\IDE\\Microsoft Visual Studio\\Repository\\carapinaDetector\\descriptors", descriptors);
-
-    if (imagePath.empty()) {
-        cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
+    if (argc == 1) {
+        cout << "Too few arguments\n" <<
+            "Usage: carapinaDetector.exe path\\to\\image\\1 <path\\to\\image\\n>\n";
         return 0;
     }
 
-    int counter = 0;
-    const int imgDelayMillis = 0;
+    vector<string> imagePath = {};
+    for (int i = 1; i < argc; i++)
+        imagePath.push_back(string(argv[i]));
 
-    sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Carapina detector", sf::Style::Close);
-    sf::Image image;
-    sf::Texture texture;
-    sf::Sprite sprite;
-    sf::Font font;
-    font.loadFromFile("C:\\Windows\\Fonts\\courbd.ttf");
-    sf::Text text;
-    text.setString(imagePath[counter]);
-    text.setFont(font);
-    text.setFillColor(sf::Color::White);
-    text.setOutlineThickness(1.5);
-    text.setOutlineColor(sf::Color::Black);
-    text.setCharacterSize(28);
-
-    //cv::namedWindow("rescaledMat");
-
-    cv::Mat grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
-    cv::Mat binarizedFlatMat;
-    cv::Mat flatMat;
-
-    cv::Mat tmpMat;
-    cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
-    image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
-    tmpMat.release();
-    texture.loadFromImage(image);
-    sprite.setTexture(texture);
-
-    float scale = float(WIN_WIDTH) / sprite.getLocalBounds().width;
-    sprite.setScale({ scale, scale });
-
-    bool finished = false;
-    bool needUpdate = true;
-    while (window.isOpen())
-    {
-        sf::Event e;
-        while (window.pollEvent(e))
-        {
-            switch (e.type) {
-            case sf::Event::Closed:
-                window.close();
-                break;
-            case sf::Event::KeyPressed:
-                switch (e.key.code) {
-                case sf::Keyboard::Escape:
-                    window.close();
-                    break;
-                case sf::Keyboard::Right:
-                    needUpdate = true;
-                    counter++;
-                    if (counter >= imagePath.size())
-                        counter = 0;
-                    break;
-                case sf::Keyboard::Left:
-                    needUpdate = true;
-                    counter--;
-                    if (counter < 0)
-                        counter = (int)imagePath.size() - 1;
-                    break;
-                }
-            }
-        }
-
-        if (needUpdate) {
-            needUpdate = false;
-
-            grayMat.release();
-            grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
-
-            int img_name_ptr = imagePath[counter].find_last_of("\\");
-            int img_extension_ptr = imagePath[counter].find_last_of(".");
-            string imgName = imagePath[counter].substr(img_name_ptr + 1, img_extension_ptr - img_name_ptr - 1);
-
-            // background - 0
-            // lopatka - 1
-            // sled_ot_frezi - 2 <-
-            // zaboina - 3       <-
-            // carapina - 4
-            // riska - 5
-            // nadir - 6         <-
-            // chernota - 7      <-
-
-            map<int, cv::Mat> masks;
-
-            binarizedFlatMat.release();
-            flatMat.release();
-            templatePictureMaker(grayMat, flatMat, binarizedFlatMat, 0, 0, grayMat.rows, grayMat.cols);
-            makeLopatkaMask(binarizedFlatMat, masks[1], imagePath[counter]); // 1
-
-            //imwrite("C:\\out\\flat1\\" + imgName + ".png", flatMat);
-
-            GetMasks(grayMat, descriptors, 6, masks); // 2,3,6,7
-
-            cv::Mat outMASK = cv::Mat::zeros(grayMat.size(), CV_8U);
-            for (auto& maskIt : masks) {
-                for (int i = 0; i < outMASK.rows; i++)
-                    for (int j = 0; j < outMASK.cols; j++)
-                        if (maskIt.second.at<uchar>(i, j) == 255)
-                            outMASK.at<uchar>(i, j) = maskIt.first * 30;
-            }
-
-            imwrite("C:\\out\\" + imgName + "_seg.png", outMASK);
-
-            outMASK.release();
-            for (auto& it : masks)
-                it.second.release();
-            map<int, cv::Mat>().swap(masks);
-
-            cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
-            //for (int i = 0; i < grayMat.rows; i++)
-            //    for (int j = 0; j < grayMat.cols; j++) {
-            //        if (lopatkaMask.at<uchar>(i, j) == 255) {
-            //            tmpMat.at<cv::Vec4b>(i, j)[0] = 255;
-            //            tmpMat.at<cv::Vec4b>(i, j)[3] = 255;
-            //        }
-            //    }
-            image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
-            tmpMat.release();
-            texture.loadFromImage(image);
-
-            text.setString(imagePath[counter]);
-            cout << "Showed file \"" << imagePath[counter] << "\"\n";
-        }
-
-        window.clear();
-
-        sprite.setTexture(texture);
-        window.draw(sprite);
-
-        window.draw(text);
-        window.display();
-
-        this_thread::sleep_for(chrono::milliseconds(1));
-    }
-
-    cv::destroyAllWindows();
+    cout << "Founded arguments:\n";
+    for (auto& it : imagePath)
+        cout << it << '\n';
 
     return 0;
+    
+    //vector<string> imagePath = {};
+
+    //extra::loadFilenames(DATASET_PATH, ".jpg", imagePath);
+    //extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
+
+
+    //map<int, cv::Mat> descriptors;
+    //loadModels("D:\\IDE\\Microsoft Visual Studio\\Repository\\carapinaDetector\\descriptors", descriptors);
+
+    //if (imagePath.empty()) {
+    //    cout << "Directory \"" << DATASET_PATH << "\" is empty or doesn't exist.\n";
+    //    return 0;
+    //}
+
+    //int counter = 0;
+    //const int imgDelayMillis = 0;
+
+    //sf::RenderWindow window(sf::VideoMode(WIN_WIDTH, WIN_HEIGHT), "Carapina detector", sf::Style::Close);
+    //sf::Image image;
+    //sf::Texture texture;
+    //sf::Sprite sprite;
+    //sf::Font font;
+    //font.loadFromFile("C:\\Windows\\Fonts\\courbd.ttf");
+    //sf::Text text;
+    //text.setString(imagePath[counter]);
+    //text.setFont(font);
+    //text.setFillColor(sf::Color::White);
+    //text.setOutlineThickness(1.5);
+    //text.setOutlineColor(sf::Color::Black);
+    //text.setCharacterSize(28);
+
+    ////cv::namedWindow("rescaledMat");
+
+    //cv::Mat grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
+    //cv::Mat binarizedFlatMat;
+    //cv::Mat flatMat;
+
+    //cv::Mat tmpMat;
+    //cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
+    //image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
+    //tmpMat.release();
+    //texture.loadFromImage(image);
+    //sprite.setTexture(texture);
+
+    //float scale = float(WIN_WIDTH) / sprite.getLocalBounds().width;
+    //sprite.setScale({ scale, scale });
+
+    //bool finished = false;
+    //bool needUpdate = true;
+    //while (window.isOpen())
+    //{
+    //    sf::Event e;
+    //    while (window.pollEvent(e))
+    //    {
+    //        switch (e.type) {
+    //        case sf::Event::Closed:
+    //            window.close();
+    //            break;
+    //        case sf::Event::KeyPressed:
+    //            switch (e.key.code) {
+    //            case sf::Keyboard::Escape:
+    //                window.close();
+    //                break;
+    //            case sf::Keyboard::Right:
+    //                needUpdate = true;
+    //                counter++;
+    //                if (counter >= imagePath.size())
+    //                    counter = 0;
+    //                break;
+    //            case sf::Keyboard::Left:
+    //                needUpdate = true;
+    //                counter--;
+    //                if (counter < 0)
+    //                    counter = (int)imagePath.size() - 1;
+    //                break;
+    //            }
+    //        }
+    //    }
+
+    //    if (needUpdate) {
+    //        needUpdate = false;
+
+    //        grayMat.release();
+    //        grayMat = cv::imread(imagePath[counter], cv::IMREAD_GRAYSCALE);
+
+    //        int img_name_ptr = imagePath[counter].find_last_of("\\");
+    //        int img_extension_ptr = imagePath[counter].find_last_of(".");
+    //        string imgName = imagePath[counter].substr(img_name_ptr + 1, img_extension_ptr - img_name_ptr - 1);
+
+    //        // background - 0
+    //        // lopatka - 1
+    //        // sled_ot_frezi - 2 <-
+    //        // zaboina - 3       <-
+    //        // carapina - 4
+    //        // riska - 5
+    //        // nadir - 6         <-
+    //        // chernota - 7      <-
+
+    //        map<int, cv::Mat> masks;
+
+    //        binarizedFlatMat.release();
+    //        flatMat.release();
+    //        templatePictureMaker(grayMat, flatMat, binarizedFlatMat, 0, 0, grayMat.rows, grayMat.cols);
+    //        makeLopatkaMask(binarizedFlatMat, masks[1], imagePath[counter]); // 1
+
+    //        //imwrite("C:\\out\\flat1\\" + imgName + ".png", flatMat);
+
+    //        GetMasks(grayMat, descriptors, 6, masks); // 2,3,6,7
+
+    //        cv::Mat outMASK = cv::Mat::zeros(grayMat.size(), CV_8U);
+    //        for (auto& maskIt : masks) {
+    //            for (int i = 0; i < outMASK.rows; i++)
+    //                for (int j = 0; j < outMASK.cols; j++)
+    //                    if (maskIt.second.at<uchar>(i, j) == 255)
+    //                        outMASK.at<uchar>(i, j) = maskIt.first * 30;
+    //        }
+
+    //        imwrite("C:\\out\\" + imgName + "_seg.png", outMASK);
+
+    //        outMASK.release();
+    //        for (auto& it : masks)
+    //            it.second.release();
+    //        map<int, cv::Mat>().swap(masks);
+
+    //        cv::cvtColor(grayMat, tmpMat, cv::COLOR_GRAY2RGBA);
+    //        //for (int i = 0; i < grayMat.rows; i++)
+    //        //    for (int j = 0; j < grayMat.cols; j++) {
+    //        //        if (lopatkaMask.at<uchar>(i, j) == 255) {
+    //        //            tmpMat.at<cv::Vec4b>(i, j)[0] = 255;
+    //        //            tmpMat.at<cv::Vec4b>(i, j)[3] = 255;
+    //        //        }
+    //        //    }
+    //        image.create(tmpMat.cols, tmpMat.rows, tmpMat.ptr());
+    //        tmpMat.release();
+    //        texture.loadFromImage(image);
+
+    //        text.setString(imagePath[counter]);
+    //        cout << "Showed file \"" << imagePath[counter] << "\"\n";
+    //    }
+
+    //    window.clear();
+
+    //    sprite.setTexture(texture);
+    //    window.draw(sprite);
+
+    //    window.draw(text);
+    //    window.display();
+
+    //    this_thread::sleep_for(chrono::milliseconds(1));
+    //}
+
+    //cv::destroyAllWindows();
+
+    //return 0;
 }
 
 void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::string& path) {
