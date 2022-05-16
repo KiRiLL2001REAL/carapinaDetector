@@ -42,7 +42,7 @@ int main()
     extra::loadFilenames(DATASET_PATH, ".jpg", imagePath);
     extra::loadFilenames(DATASET_PATH, ".bmp", imagePath);
 
-    
+
     map<int, cv::Mat> descriptors;
     loadModels("D:\\IDE\\Microsoft Visual Studio\\Repository\\carapinaDetector\\descriptors", descriptors);
 
@@ -262,9 +262,9 @@ void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::s
         }
     }
     vector<Point> contour = vector<Point>(contours[maxIndexSize].begin(), contours[maxIndexSize].end());
-    contour.insert(contour.end(), contours[prevMaxIndexSize].begin(),     contours[prevMaxIndexSize].end());
-    contour.insert(contour.end(), contours[maxIndexArea].begin(),         contours[maxIndexArea].end());
-    contour.insert(contour.end(), contours[prevMaxIndexArea].begin(),     contours[prevMaxIndexArea].end());
+    contour.insert(contour.end(), contours[prevMaxIndexSize].begin(), contours[prevMaxIndexSize].end());
+    contour.insert(contour.end(), contours[maxIndexArea].begin(), contours[maxIndexArea].end());
+    contour.insert(contour.end(), contours[prevMaxIndexArea].begin(), contours[prevMaxIndexArea].end());
 
     RotatedRect rrect = minAreaRect(contour);
     vector<Point2f> rectPoints(4);
@@ -280,6 +280,16 @@ void makeLopatkaMask(const cv::Mat& binarizedFlatMat, cv::Mat& dst, const std::s
     floodFill(mask, Point(rrect.center), Scalar(255));
 
     dst = mask;
+}
+
+void Masking(int*& rep_arr, int*& color_sum, int*& vertex_cnt, Mat& resImg, Mat& maskImg, int& i, int& j, int& nj) {
+    int u = rep_arr[i * nj + j];
+    resImg.at<uchar>(i, j) = floor((float)color_sum[u] / (vertex_cnt[u]));// - min_color;
+    uchar color;
+    if (vertex_cnt[u] <= 25)
+        color = 255;
+    else color = 0;
+    maskImg.at<uchar>(i, j) = color;
 }
 
 void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedFlat, int start_i, int start_j, int ni, int nj)
@@ -307,7 +317,7 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedF
         {
             /*if ((int)src.at<uchar>(i, j) < min_color)
               min_color = (int)src.at<uchar>(i, j);*/
-            
+
             delt_arr[(i * borderJ + j) * 2].pix_num_start = (i - start_i) * nj + (j - start_j);
             delt_arr[(i * borderJ + j) * 2].pix_num_finish = (i - start_i + 1) * nj + (j - start_j); // Вниз
             delt_arr[(i * borderJ + j) * 2].delta = abs((int)blured.at<uchar>(i, j) - (int)blured.at<uchar>(i + 1, j));
@@ -415,19 +425,21 @@ void templatePictureMaker(const cv::Mat& src, cv::Mat& flat, cv::Mat& binarizedF
 
     Mat resImg = Mat::zeros(ni, nj, CV_8UC1);
     Mat maskImg = Mat::zeros(ni, nj, CV_8UC1);
-    for (int i = 0; i < ni; i++)
+    for (int i = 0; i < ni; i++) {
 #pragma omp parallel for
         for (int j = 0; j < nj; j++)
         {
-            u = getRep(rep_arr, i * nj + j);
-            resImg.at<uchar>(i, j) = floor((float)color_sum[u] / (vertex_cnt[u]));// - min_color;
-
-            uchar color;
-            if (vertex_cnt[u] <= 25)
-                color = 255;
-            else color = 0;
-            maskImg.at<uchar>(i, j) = color;
+            //u = getRep(rep_arr, i * nj + j);
+            //resImg.at<uchar>(i, j) = floor((float)color_sum[u] / (vertex_cnt[u]));// - min_color;
+            //
+            //uchar color;
+            //if (vertex_cnt[u] <= 25)
+            //    color = 255;
+            //else color = 0;
+            //maskImg.at<uchar>(i, j) = color;
+            Masking(rep_arr, color_sum, vertex_cnt, resImg, maskImg, i, j, nj);
         }
+    }
 
     delete[] delt_arr;
     delete[] rep_arr;
